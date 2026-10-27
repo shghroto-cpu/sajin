@@ -7,7 +7,7 @@
     const m = state.meta || {};
     // 사진 칸 크기(HWPUNIT): 원본 양식의 사진 크기에서 가져옴, 4:3 상자
     const BOX_W = (T.picBox && T.picBox[0]) || 22372, BOX_H = Math.round(BOX_W * 3 / 4);
-    const BF_PHOTO = T.photoBorder || '7', BF_GAP = T.gapBorder || '8';
+    const BF_PHOTO = T.photoBorder || '7';
     let uid = 1900000000 + Math.floor(Math.random() * 90000000), z = 300;
     const newId = () => ++uid;
     const media = [];
@@ -63,7 +63,7 @@
           TID: newId(), TZ: ++z,
           PIC1: picXml(a), PIC2: b ? picXml(b) : '',
           CAP1: caption(a), CAP2: b ? caption(b) : T.capEmpty,
-          BF1: BF_PHOTO, BF2: b ? BF_PHOTO : BF_GAP,
+          BF1: BF_PHOTO, BF2: BF_PHOTO,  // 사진이 홀수 장이어도 빈칸은 사진 칸과 같은 테두리
           RH: h1 + 282, TH: h1 + 282 + 2898
         });
         out.push(t);
