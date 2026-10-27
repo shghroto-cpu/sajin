@@ -1,0 +1,15 @@
+{
+  "name": "sajin-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "국토안전관리원 관리주체 합동점검 현장 사진대지 웹앱 (휴대폰용, 한글 HWPX 보고서 생성)",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node tests/make_sample.mjs && python3 tests/validate_hwpx.py tests/out/sample.hwpx",
+    "template": "python3 scripts/prepare_template.py"
+  },
+  "devDependencies": {
+    "jszip": "3.10.1"
+  }
+}

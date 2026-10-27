@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>현장 사진대지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/*@@STYLE@@*/
+</style>
+</head>
+<body>
+<header class="top"><div class="inner">
+  <div class="grow"><h1>현장 사진대지</h1><p id="hdrSub">새 보고서</p></div>
+  <button class="ghost" id="resetBtn" type="button">새로 시작</button>
+</div><div class="stripe"></div></header>
+
+<main class="wrap">
+  <details class="block" id="metaBox">
+    <summary>기본정보</summary>
+    <div class="form" id="metaForm"></div>
+  </details>
+  <div id="sections"></div>
+  <button class="addsec" id="addSecBtn" type="button">＋ 점검 항목 추가</button>
+  <p class="sub" style="margin-top:14px">사진과 입력 내용은 이 휴대폰 브라우저에만 저장되며, 어디에도 업로드되지 않습니다.<br>앱 버전 2026.10.27-B (저장 시 한글 보고서+사진을 압축파일 1개로 저장)</p>
+</main>
+
+<div class="bar"><div class="inner">
+  <div class="count">사진<b id="cnt">0장</b></div>
+  <button class="mail" id="saveBtn" type="button">파일 저장</button>
+  <button class="save" id="mailBtn" type="button">메일로 보내기</button>
+</div><p class="msg" id="msg" role="status"></p></div>
+
+<input type="file" id="fileIn" accept="image/*" multiple hidden>
+
+<dialog id="dlg"><div class="sheet" id="sheet"></div></dialog>
+
+<!--@@SCRIPTS@@-->
+</body>
+</html>
