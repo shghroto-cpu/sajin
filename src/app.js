@@ -11,6 +11,27 @@ const DAMAGE = ['균열','철근노출','박리·박락','누수·백태','기�
 const LABELS = ['정밀안전점검 보고서 발췌','정밀안전점검 시의 외관조사 사진'];
 
 const IMP = window.SajinImport;
+// 아이콘: 직접 그린 단순 SVG (외부 아이콘 묶음 없음, viewBox 24, 선 굵기 2). 버튼에 data-icon="이름" 을 붙이면
+// CSS ::before 로 글자 앞에 그린다 → 버튼 글자(textContent)를 바꿔도 아이콘이 남고, 테스트가 글자로 찾을 수 있음
+const ICON = {
+  camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  qr:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2"/>',
+  file:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>',
+  phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/>',
+  map:'<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/>',
+  back:'<path d="M15 5l-7 7 7 7"/>', up:'<path d="M6 15l6-6 6 6"/>', down:'<path d="M6 9l6 6 6-6"/>',
+  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>', check:'<path d="M5 12.5l4.5 4.5L19 7"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', chev:'<path d="M9 5l7 7-7 7"/>',
+  save:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', share:'<path d="M12 15V4M8 8l4-4 4 4M5 13v7h14v-7"/>'
+};
+(() => {
+  const st = document.createElement('style');
+  st.textContent = Object.entries(ICON).map(([k, d]) => `[data-icon="${k}"]{--ic:url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>${d.replace(/"/g, "'")}</svg>`)}")}`).join('\n');
+  document.head.appendChild(st);
+})();
+const withIcon = (b, name) => { b.dataset.icon = name; return b; };
 const defaultMeta = () => ({
   date:`${today.getFullYear()}. ${String(today.getMonth()+1).padStart(2,'0')}.`,
   purpose:'정밀안전점검·진단의 사실관계확인 및 시설물 유지관리요령 전파',
@@ -273,9 +294,9 @@ function renderSections(){
     head.append(mark, ti);
     if (!isProp){
       const ri = results.indexOf(s);
-      const up = btn('icon','↑', () => moveSec(s, -1), '위로'); up.disabled = ri === 0;
-      const dn = btn('icon','↓', () => moveSec(s, 1), '아래로'); dn.disabled = ri === results.length - 1;
-      const del = btn('icon','✕', () => removeSec(s), '항목 삭제');
+      const up = withIcon(btn('icon','', () => moveSec(s, -1), '위로'), 'up'); up.disabled = ri === 0;
+      const dn = withIcon(btn('icon','', () => moveSec(s, 1), '아래로'), 'down'); dn.disabled = ri === results.length - 1;
+      const del = withIcon(btn('icon del','', () => removeSec(s), '항목 삭제'), 'trash');
       head.append(up, dn, del);
     }
     el.appendChild(head);
@@ -300,7 +321,7 @@ function renderSections(){
       });
       el.appendChild(g);
     }
-    const add = btn('add','＋ 사진 촬영·추가', () => pickPhotos(s.id));
+    const add = withIcon(btn('add','사진 촬영·추가', () => pickPhotos(s.id)), 'camera');
     add.dataset.sec = s.id;
     el.appendChild(add);
     box.appendChild(el);
@@ -667,28 +688,29 @@ function siteCard(s, team){
   const sg = s.src ? s.src.safetyGrade : '';
   const tags = el('span', 'tags');
   if (team) tags.appendChild(el('span', 'tag team', team));
-  if (m.grade) tags.appendChild(el('span', 'tag', m.grade));
-  if (sg) tags.appendChild(el('span', 'tag' + (/^[DE]/i.test(sg) ? ' alert' : ''), sg));
+  if (m.grade) tags.appendChild(el('span', 'tag jong jong-' + (/1/.test(m.grade) ? '1' : /2/.test(m.grade) ? '2' : '3'), m.grade));
+  // 안전등급: 등급별 고정색 (D·E 는 .alert 도 유지), 종별: 테두리만 있는 태그
+  if (sg) tags.appendChild(el('span', 'tag grade grade-' + (/^[A-E]/i.test(sg) ? sg[0].toLowerCase() : 'x') + (/^[DE]/i.test(sg) ? ' alert' : ''), sg));
   l1.appendChild(tags);
   const l2 = el('div', 'st2', [m.location, s.buildings ? s.buildings + '개동' : '', s.src && s.src.ampm].filter(Boolean).join(' · '));
   const l3 = el('div', 'st3');
   const pc = photoCount(s);
   l3.appendChild(el('span', 'state' + (s.savedAt ? ' done' : pc ? ' doing' : ''), s.savedAt ? `저장함 · 사진 ${pc}장` : `사진 ${pc}장`));
-  if (s.removed) l3.appendChild(el('span', 'tag alert', '목록에서 빠짐'));
+  if (s.removed) l3.appendChild(el('span', 'tag alert gone', '목록에서 빠짐'));
   if (s.contact) l3.appendChild(el('span', 'who', '담당 ' + s.contact));
   open.append(l1, l2, l3);
   open.addEventListener('click', () => openSite(s.id));
   card.appendChild(open);
   const acts = el('div', 'acts');
   const tel = String(s.phone || '').replace(/[^\d+]/g, '');
-  if (tel){ const a = el('a', 'btn sm', '전화'); a.href = 'tel:' + tel; a.setAttribute('aria-label', (m.facility || '') + ' 전화 ' + s.phone); acts.appendChild(a); }
+  if (tel){ const a = withIcon(el('a', 'btn sm', '전화'), 'phone'); a.href = 'tel:' + tel; a.setAttribute('aria-label', (m.facility || '') + ' 전화 ' + s.phone); acts.appendChild(a); }
   if (m.location){
     // 누를 때만 지도 서비스로 주소를 보냄 (자동 전송 없음)
-    const a = el('a', 'btn sm', '지도'); a.href = 'https://map.naver.com/p/search/' + encodeURIComponent(m.location);
+    const a = withIcon(el('a', 'btn sm', '지도'), 'map'); a.href = 'https://map.naver.com/p/search/' + encodeURIComponent(m.location);
     a.target = '_blank'; a.rel = 'noopener noreferrer'; acts.appendChild(a);
   }
   if (s.removed || !s.src || s.slot != null){
-    const d = el('button', 'btn sm dangertxt', '삭제'); d.type = 'button';
+    const d = withIcon(el('button', 'btn sm dangertxt', '삭제'), 'trash'); d.type = 'button';
     d.addEventListener('click', () => removeSite(s)); acts.appendChild(d);
   }
   if (acts.children.length) card.appendChild(acts);
