@@ -382,8 +382,15 @@ async def qr_flow(b, fx):
     assert '이미 더 최신 목록' in await msg(A, '이미 더 최신')
     # 5) 이 앱 형식이 아닌 #q=
     await A.goto(URL + '#q=9.2.abcd.xyz'); assert '이 앱용 QR이 아닙니다' in await msg(A, '이 앱용 QR')
-    # 6) 메일 파일 방식도 그대로
-    await load_file(A, fx / 'team1.sajin'); await msg(A, '1팀 (시험권)')
+    # 6) 메일 파일 방식도 그대로. 처음 받는 목록은 저장된 키(같은 비밀번호)가 있어도 비밀번호를 한 번 입력
+    await load_file(A, fx / 'team1.sajin'); await A.wait_for_selector('#passIn')
+    assert '팀 비밀번호를 입력하세요' in await A.text_content('.keycard')
+    await A.fill('#passIn', 'wrong-passphrase-00000'); await A.click('.keycard button:has-text("확인")')
+    await A.wait_for_function("document.querySelector('.keycard .msg').textContent.includes('맞지 않습니다')")
+    await A.fill('#passIn', PASS); await A.click('.keycard button:has-text("확인")'); await msg(A, '1팀 (시험권)')
+    assert await A.evaluate("""async () => { const db = await new Promise(r => { const q = indexedDB.open('sajindaeji', 1); q.onsuccess = () => r(q.result); });
+      const k = await new Promise(r => { const q = db.transaction('kv').objectStore('kv').get('listKeys'); q.onsuccess = () => r(q.result); });
+      return Object.values(k).reduce((a, l) => a + l.length, 0); }""") == 1, '같은 비밀번호 키는 중복 저장하지 않음'
     assert not A.errs, A.errs
     await ctx.close()
 

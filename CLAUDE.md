@@ -118,7 +118,7 @@ secOpen → head(표지~"개 요", {{DATE}})
 - 파일: `{type:'sajin-list', v:2, alg, kdf:{name, iter, saltId}, keyCheck, iv, ct, createdAt}` — 평문은 createdAt·saltId 뿐. 100KB 이하.
   내용: `{listId, listVersion, team:{name, members}, batch:{id, name, dates}, sites:[importer 행]}`. 같은 목록을 고쳐 다시 보낼 땐 이전 파일로 listId 이어받기(`--prev`, 관리 화면 「이전 목록 파일 불러오기」).
 - 암호화: AES-256-GCM, PBKDF2-SHA256 600,000회, 파일마다 IV 새로, `keyCheck`로 틀린 비밀번호 즉시 판별. 비밀번호는 **팀마다 따로**(1팀 비밀번호, 2팀 비밀번호 …), 12자 이상. 관리 화면은 「1. 팀 → 2. 그 팀 비밀번호(두 번) → 3. 엑셀 → 4. 파일·QR」 순서이고, 비밀번호를 아는 팀원이면 누구나 만든다 (이 PC에서 쓴 팀 이름만 localStorage `sajin.teams`에 기억, 비밀번호는 저장 안 함).
-  휴대폰 키는 `kv/listKeys` `{솔트 이름:[{key, addedAt}, …]}` — 팀 키 여러 개를 차례로 맞춰 보고, 맞는 키가 없으면 「이 목록의 팀 비밀번호를 입력하세요」. (예전 형식 `{솔트:{key}}`는 읽을 때 배열로 바꿈)
+  휴대폰 키는 `kv/listKeys` `{솔트 이름:[{key, addedAt}, …]}` — 팀 키 여러 개를 차례로 맞춰 보고, 맞는 키가 없으면 「이 목록의 팀 비밀번호를 입력하세요」. **처음 받는 목록(이 휴대폰에 없는 listId)은 키가 맞아도 비밀번호를 한 번 입력받는다** (`openWithKey`, 담당자 요청). 저장된 키는 이미 받은 목록의 새 판에만 자동으로 쓴다. (예전 형식 `{솔트:{key}}`는 읽을 때 배열로 바꿈)
 - 솔트는 `data/crypto.json`을 **빌드 때 앱·관리 파일에 내장**(`window.SAJIN_CRYPTO`). 비밀번호 교체 = 새 솔트 추가 → 빌드 → 배포. 이전 솔트는 이전 파일용으로 남김.
 - 휴대폰: 비밀번호는 저장하지 않고 솔트별 **추출 불가 CryptoKey**만 IndexedDB `kv/listKeys`에. 현재 솔트 키를 받은 지 2주 지나면 이전 솔트 키 삭제. `app.team = {lists:{listId:…}, myName, nameAsked, chosen}`.
 - 병합: listId + 시설물명 + 날짜(`applyListFile`). 같은 listId 새 판은 `edited`·사진 보존·빠진 것 "목록에서 빠짐", 같은 판·옛 판은 무시. 지시서 2 방식으로 받은 시설물(`slot`)은 「이전 방식으로 받은 목록」 표시 후 같은 팀 목록 파일을 열면 이어받음.

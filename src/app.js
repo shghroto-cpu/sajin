@@ -779,10 +779,17 @@ async function openSajin(file){
   if (!LC.isEncFile(file)) throw new Error('대상목록 파일이 손상되었습니다. 팀장에게 다시 받아 주세요.');
   const salt = LC.saltById(CRYPTO, file.kdf && file.kdf.saltId);
   if (!salt) throw new Error('이 목록 파일은 더 새로운 앱에서 만들어졌습니다. 앱을 새로고침해 최신 버전으로 바꾼 뒤 다시 불러오세요.');
+  return openWithKey(file, salt);
+}
+// 저장된 키는 이미 받은 목록(같은 listId)의 새 판에만 쓴다. 처음 받는 목록은 키가 맞아도 팀 비밀번호를 한 번 입력받는다
+async function openWithKey(file, salt){
   await loadKeys();
   const k = await findKey(file, salt.id);
-  if (k) return applyListFile(k, file);
-  pendingFile = file; keyState = keyCount() ? 'other' : 'need';
+  if (k){
+    const c = file.qr ? await QR.decrypt(k, file.qr) : await LC.decryptList(k, file);
+    if (c && c.listId && T().lists[String(c.listId).slice(0, 64)]) return applyListFile(k, file);
+  }
+  pendingFile = file; file.hadKey = !!k; keyState = k || !keyCount() ? 'need' : 'other';
   renderList(); window.scrollTo(0, 0);
   const pi = $('#passIn'); if (pi) pi.focus();
 }
@@ -798,7 +805,8 @@ async function submitPass(pw, out, b){
       else out.textContent = file.qr ? QR_BAD : '비밀번호가 맞지 않습니다.';
       return;
     }
-    fails = 0; keys[salt.id] = (keys[salt.id] || []).concat([{key, addedAt:Date.now()}]).slice(-20); await saveKeys();
+    fails = 0;
+    if (!file.hadKey){ keys[salt.id] = (keys[salt.id] || []).concat([{key, addedAt:Date.now()}]).slice(-20); await saveKeys(); }
     pendingFile = null; keyState = '';
     await applyListFile(key, file);
   }catch(e){ out.textContent = e.message || '확인하지 못했습니다.'; }
@@ -836,7 +844,7 @@ function keyCard(){
   const qrNote = pendingFile && pendingFile.qr ? ' QR이 손상되었을 수도 있으니, 맞는 비밀번호인데도 안 되면 QR을 다시 찍어 주세요.' : '';
   const c = keyState === 'other'
     ? card('이 목록의 팀 비밀번호를 입력하세요', '다른 팀 목록이거나 팀 비밀번호가 바뀌었습니다. 이 목록 팀의 비밀번호를 입력하세요 (팀마다 다릅니다). 휴대폰의 사진·작성 내용은 그대로 있습니다.' + qrNote)
-    : card('팀 비밀번호를 입력하세요', '우리 팀 비밀번호를 입력하세요 (팀마다 다릅니다). 처음 한 번만 입력하면 됩니다. 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.' + qrNote);
+    : card('팀 비밀번호를 입력하세요', '우리 팀 비밀번호를 입력하세요 (팀마다 다릅니다). 처음 받는 목록은 한 번 입력해야 등록됩니다 (같은 목록의 새 판은 다시 묻지 않음). 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.' + qrNote);
   const i = document.createElement('input'); i.type = 'password'; i.id = 'passIn'; i.autocomplete = 'current-password'; i.setAttribute('aria-label', '팀 비밀번호');
   const out = el('p', 'msg err'); out.setAttribute('role', 'alert');
   const b = btn('btn primary', '확인', () => submitPass(i.value, out, b));
@@ -965,12 +973,7 @@ async function receiveQr(text, scanned){
 async function openQR(payload){
   const salt = LC.saltById(CRYPTO, payload.saltId);
   if (!salt) throw new Error('이 QR은 더 새로운 앱에서 만들어졌습니다. 앱을 새로고침해 최신 버전으로 바꾼 뒤 다시 찍어 주세요.');
-  await loadKeys();
-  const file = {qr:payload, kdf:{saltId:salt.id}}, k = await findKey(file, salt.id);
-  if (k) return applyListFile(k, file);
-  pendingFile = file; keyState = keyCount() ? 'other' : 'need';
-  renderList(); window.scrollTo(0, 0);
-  const pi = $('#passIn'); if (pi) pi.focus();
+  return openWithKey({qr:payload, kdf:{saltId:salt.id}}, salt);
 }
 function qrProgCard(bid, b){
   const c = card(qrProgText(b), '여러 장이면 순서 상관없이 모두 찍으세요. 받다 만 QR은 24시간 뒤 지워집니다.'); c.classList.add('qrprog');
