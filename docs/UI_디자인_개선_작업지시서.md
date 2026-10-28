@@ -399,3 +399,5 @@
 - **2026-10-28 0단계**: `git status` 깨끗함 (지시서 문서 2개만 새 파일). 브랜치 `ui-refresh` 생성. 바뀌기 전 캡처 `tests/out/before/` (e2e 캡처 + `tests/ui_shots.py` 폭 360·390·430 × 라이트·다크 8화면 + 관리 화면 1280), `section0.xml` 보관. 크기: index.html 3,563,745 B, dist/admin.html 261,121 B
   - 한글 출력 비교: 생성기가 표·그림 `id`·`instid`·`zOrder`를 실행마다 무작위로 만들므로 그 숫자만 빼고 비교 (나머지 완전히 같아야 함)
 - **1단계 (색 체계)**: §3 토큰으로 교체, 옛 변수(`--vis`·`--surface`·`--danger`) 0건. 머리글 그라데이션·줄무늬 숨김, 주 버튼(저장 포함) 남색 한 가지, 「오늘」 금색, D등급 `--g-alert`, QR 받은 번호 초록. 테스트 통과, 한글 section0.xml 같음
+- **2단계 (글꼴)**: Pretendard 1.3.9 서브셋 500·700 내장 (`scripts/build.mjs` `FONTS`, 버전 다르면 빌드 실패), Google Fonts 3줄 삭제. `document.fonts.check('700 16px Pretendard')` = true (앱·관리 파일 모두). 앱 외부 요청은 cdnjs JSZip 1건만, 관리 파일 0건. 글자 크기 표대로 정리 (화면 글자 12px 이하 0건, 인쇄용 `.ppage` 제외), 제목·라벨·버튼 700
+  - 크기: index.html 3,565,062 → 4,284,160 B (+0.69MB), dist/admin.html 262,438 → 981,788 B

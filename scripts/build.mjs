@@ -49,6 +49,16 @@ for (const [k, [pkg, ver, file, head]] of Object.entries(LIBS)) {
   lib[k] = head + '\n' + inline(rd(`node_modules/${pkg}/${file}`).trimEnd());
 }
 
+// 내장 글꼴 (웹폰트 서비스에서 받지 않음): Pretendard 1.3.9 (SIL OFL 1.1), 한글 2,350자 서브셋 500·700
+const FONTS = { pkg: 'pretendard', ver: '1.3.9', dir: 'dist/web/static/woff2-subset', faces: [[500, 'Pretendard-Medium.subset.woff2'], [700, 'Pretendard-Bold.subset.woff2']] };
+{
+  const got = JSON.parse(rd(`node_modules/${FONTS.pkg}/package.json`)).version;
+  if (got !== FONTS.ver) throw new Error(`${FONTS.pkg} 버전이 ${got} 입니다 (${FONTS.ver} 필요). npm install 을 다시 하세요.`);
+}
+const fontCss = '/*! Pretendard 1.3.9 | SIL OFL 1.1 | github.com/orioncactus/pretendard */\n' + FONTS.faces.map(([w, f]) =>
+  `@font-face{font-family:"Pretendard";font-weight:${w};font-style:normal;font-display:swap;src:url(data:font/woff2;base64,${readFileSync(join(root, 'node_modules', FONTS.pkg, FONTS.dir, f)).toString('base64')}) format("woff2")}`).join('\n') + '\n';
+const styles = fontCss + css;
+
 for (const [name, s] of [['src/index.html', shell], ['src/admin.html', adminShell]])
   for (const marker of ['/*@@STYLE@@*/', '<!--@@SCRIPTS@@-->'])
     if (!s.includes(marker)) throw new Error(`${name}에 ${marker} 표시가 없습니다.`);
@@ -57,16 +67,16 @@ const scripts = boot +
   `<script type="application/json" id="hwpxTpl">${tpl}</script>\n` +
   `<script type="text/plain" id="hwpxBase">${b64}</script>\n` +
   [gen, xlsx, imp, lcr, lib.fflate, lib.qrgen, lib.jsqr, qrc, adm, app].map(js => `<script>\n${js}\n</script>`).join('\n');
-const html = shell.replaceAll('@@VERSION@@', VERSION).replace('/*@@STYLE@@*/', () => css).replace('<!--@@SCRIPTS@@-->', () => scripts);
+const html = shell.replaceAll('@@VERSION@@', VERSION).replace('/*@@STYLE@@*/', () => styles).replace('<!--@@SCRIPTS@@-->', () => scripts);
 for (const out of ['index.html', 'dist/index.html']) {
   mkdirSync(dirname(join(root, out)), { recursive: true });
   writeFileSync(join(root, out), html);
 }
 
-// 오프라인 관리 파일: JSZip 을 CDN 대신 파일 안에 넣음 (MIT 라이선스 주석 유지), 웹폰트 없음
+// 오프라인 관리 파일: JSZip 을 CDN 대신 파일 안에 넣음 (MIT 라이선스 주석 유지), 글꼴도 내장
 const jszip = rd('node_modules/jszip/dist/jszip.min.js').trimEnd();
 const adminScripts = boot + [jszip, xlsx, imp, lcr, lib.fflate, lib.qrgen, qrc, adm].map(js => `<script>\n${inline(js)}\n</script>`).join('\n');
-const adminHtml = adminShell.replaceAll('@@VERSION@@', VERSION).replace('/*@@STYLE@@*/', () => css).replace('<!--@@SCRIPTS@@-->', () => adminScripts);
+const adminHtml = adminShell.replaceAll('@@VERSION@@', VERSION).replace('/*@@STYLE@@*/', () => styles).replace('<!--@@SCRIPTS@@-->', () => adminScripts);
 if (/<(?:script|link)[^>]+(?:src|href)=["']https?:/i.test(adminHtml)) throw new Error('admin.html 에 외부 주소 참조가 있습니다.');
 writeFileSync(join(root, 'dist/admin.html'), adminHtml);
 console.log(`빌드 완료: index.html (${(html.length / 1048576).toFixed(2)} MB), dist/admin.html (${(adminHtml.length / 1024).toFixed(0)} KB, 오프라인)`);
