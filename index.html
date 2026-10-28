@@ -241,10 +241,20 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .empty>b{font-size:17px;font-weight:700}
 .empty p{margin:6px 0 0;font-size:15px;color:var(--ink2)}
 .ptitle{margin:0;font-size:19px;font-weight:700}
-.plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
-.plist li{font-size:15px;display:flex;align-items:baseline;gap:6px}
-.plist .no{color:var(--ink2);font-size:13px;min-width:18px}
-.warnbox{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;flex-direction:column;gap:2px}
+.plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 12px}
+.plist li{font-size:14px;display:flex;align-items:center;gap:8px;min-height:44px;border-bottom:1px solid var(--line2)}
+.plist li:last-child{border-bottom:0}
+.plist li b{font-size:16px;font-weight:700}
+.plist .no{color:var(--soft);font-size:13px;font-weight:700;min-width:20px}
+.plist .sub{font-size:14px}
+.pgrade{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-weight:700;color:var(--ink2)}
+.gdot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--soft)}
+.gdot.grade-a{background:var(--g-a)}.gdot.grade-b{background:var(--g-b)}.gdot.grade-c{background:var(--g-c)}.gdot.grade-d,.gdot.grade-e{background:var(--g-alert)}
+.warnbox{background:var(--warn-bg);color:var(--warn-ink);border-left:4px solid var(--gold);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;flex-direction:column;gap:2px}
+.warnbox>b{font-weight:700}
+/* 설정 시트 묶음 소제목 */
+.grp{margin:8px 0 -6px;font-size:13px;font-weight:700;color:var(--soft)}
+.wipeall{margin-top:24px}
 .modes{border:1px solid var(--line);border-radius:8px;padding:8px 12px 10px;display:flex;flex-direction:column;gap:8px;margin:0}
 .modes legend{font-size:13px;color:var(--ink2);padding:0 4px}
 .linkbox{min-height:0;font-size:13px;word-break:break-all}
@@ -269,9 +279,14 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .others{margin-top:20px}
 .others>summary{cursor:pointer;font-weight:700;color:var(--accent);padding:8px 2px}
 /* 관리 화면 (#admin) */
-.adm{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.adm{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .adm h2,.adm h3{margin:0}
-.adm h2{font-size:19px}.adm h3{font-size:16px}
+.adm h2{font-size:19px;font-weight:700}.adm h3{font-size:17px;font-weight:700}
+/* 관리 화면 단계 번호: 남색 원형 배지 */
+.steph{display:flex;align-items:center;gap:10px}
+.steph .step{flex:none;width:28px;height:28px;border-radius:50%;background:var(--primary);color:var(--on-primary);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#admMake,#admQR{min-height:52px}
+.adm .msg{max-width:none;margin:0}
 .adm .sub{margin:0}
 .admprev{display:flex;flex-direction:column;gap:8px}
 .guide{border:2px solid var(--accent)}
@@ -324,8 +339,18 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .qrprog .chips span{border:1.5px dashed var(--line);border-radius:999px;padding:2px 10px;font-size:14px;font-weight:700;color:var(--soft)}
 .qrprog .chips span.got{background:var(--green);color:#fff;border-color:var(--green);font-weight:700}
 .scan{display:flex;flex-direction:column;gap:10px}
-.scan video{width:100%;max-height:60vh;background:#000;border-radius:8px;object-fit:cover}
-@media (min-width:900px){#adminView{max-width:960px}}
+.scan video{width:100%;max-height:60vh;background:#000;border-radius:12px;object-fit:cover;display:block}
+.vwrap{position:relative}
+.vwrap::after{content:"";position:absolute;left:50%;top:50%;width:58%;aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.75);border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.18);pointer-events:none;max-height:90%}
+#scanMsg{font-size:15px;font-weight:700}
+@media (min-width:900px){
+  #adminView{max-width:960px}
+  /* 관리 화면(PC): 앱 바 64px, 머리글 폭 = 본문 폭, 미리보기 2열 */
+  body:has(#adminView:not([hidden])) header.top{padding:12px 16px;position:relative;top:0}
+  body:has(#adminView:not([hidden])) header.top .inner{max-width:960px;padding:0 14px}
+  .adm .plist{display:grid;grid-template-columns:1fr 1fr;column-gap:20px;max-height:none}
+  .adm .plist li:nth-last-child(2):nth-child(odd){border-bottom:0}
+}
 [hidden]{display:none!important}
 @media (max-width:420px){.form{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -13434,6 +13459,8 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   'use strict';
   const $ = s => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // 단계 제목: 번호를 span.step(원형 배지)으로 감쌈. 나머지 글자는 그대로
+  const stepH = (n, text) => { const h = el('h3', 'steph'); h.append(el('span', 'step', n), document.createTextNode(text)); return h; };
   const button = (cls, text, fn) => { const b = el('button', cls, text); b.type = 'button'; b.addEventListener('click', fn); return b; };
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
   function plainDownload(file) {
@@ -13470,7 +13497,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     const teamsUsed = () => { try { return JSON.parse(store.get('sajin.teams') || '[]').filter(x => typeof x === 'string'); } catch (e) { return []; } };
 
     // 1. 팀: 먼저 팀을 정하고(새 팀이면 이름 입력), 그 팀 비밀번호를 넣어야 만들 수 있다 (팀마다 비밀번호가 다름)
-    const s1 = el('section', 'block adm'); s1.appendChild(el('h3', null, '1. 팀'));
+    const s1 = el('section', 'block adm'); s1.appendChild(stepH('1', '팀'));
     s1.appendChild(el('p', 'sub', '목록을 만들 팀을 고르거나 새 팀 이름을 입력하세요.'));
     const tl = el('label', 'f', '팀 이름'); const tn = el('input'); tn.type = 'text'; tn.id = 'admTeam'; tn.placeholder = '예) 1팀 (부산권)';
     const dl = el('datalist'); dl.id = 'admTeams'; teamsUsed().forEach(t => { const o = el('option'); o.value = t; dl.appendChild(o); });
@@ -13483,7 +13510,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
     // 2. 그 팀 비밀번호 (서버가 없어 맞는지 확인할 방법이 없으므로 두 번 입력)
     const sp = el('section', 'block adm'); sp.hidden = true;
-    const spT = el('h3'); const spS = el('p', 'sub');
+    const spT = el('h3', 'steph'); const spS = el('p', 'sub');
     const pw = el('input'); pw.type = 'password'; pw.id = 'admPass'; pw.autocomplete = 'off'; pw.setAttribute('aria-label', '팀 비밀번호');
     const pw2 = el('input'); pw2.type = 'password'; pw2.id = 'admPass2'; pw2.autocomplete = 'off'; pw2.placeholder = '한 번 더 입력'; pw2.setAttribute('aria-label', '팀 비밀번호 확인');
     const out1 = el('p', 'msg err'); out1.setAttribute('role', 'alert');
@@ -13492,7 +13519,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     sp.append(spT, spS, pw, pw2, ok1, out1);
 
     // 3. 엑셀 · (갱신이면) 이전 목록 파일
-    const s2 = el('section', 'block adm'); s2.hidden = true; s2.appendChild(el('h3', null, '3. 엑셀'));
+    const s2 = el('section', 'block adm'); s2.hidden = true; s2.appendChild(stepH('3', '엑셀'));
     const xi = el('input'); xi.type = 'file'; xi.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; xi.hidden = true;
     const pi = el('input'); pi.type = 'file'; pi.hidden = true;
     const pickXls = button('btn', '엑셀 선택 (.xlsx)', () => { xi.value = ''; xi.click(); }); pickXls.id = 'admXlsBtn';
@@ -13510,7 +13537,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     s2.append(pickXls, xi, prevBox, pickPrev, pi, prevInfo, diffBox, opts, warnT);
 
     // 3. 파일 만들기
-    const s3 = el('section', 'block adm'); s3.hidden = true; s3.appendChild(el('h3', null, '4. 목록 파일 또는 QR 만들기'));
+    const s3 = el('section', 'block adm'); s3.hidden = true; s3.appendChild(stepH('4', '목록 파일 또는 QR 만들기'));
     s3.appendChild(el('p', 'sub', '팀원이 PC 앞에 모여 있으면 「QR 만들기」(휴대폰 카메라로 찍기), 아니면 「목록 파일 만들기」(기관 메일 첨부).'));
     const out3 = el('p', 'msg'); out3.setAttribute('role', 'status');
     const mk = button('btn primary', '목록 파일 만들기', make); mk.id = 'admMake';
@@ -13531,7 +13558,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       const t = tn.value.trim().slice(0, 60);
       if (!t) { out0.textContent = '팀 이름을 입력하세요.'; tn.focus(); return; }
       team = t; tn.value = t; tn.readOnly = true; ok0.hidden = true; chg.hidden = false;
-      spT.textContent = `2. ${t} 비밀번호`;
+      spT.innerHTML = ''; spT.append(el('span', 'step', '2'), document.createTextNode(`${t} 비밀번호`));
       spS.textContent = teamsUsed().includes(t) ? `${t} 비밀번호를 두 번 입력하세요. 저장되지 않습니다.`
         : `${t} 비밀번호를 두 번 입력하세요. 처음 만드는 팀이면 지금 정한 비밀번호가 이 팀 비밀번호가 됩니다 (팀마다 다르게, 12자 이상). 팀원에게 구두나 내부 메신저로만 알려 주세요. 저장되지 않습니다.`;
       sp.hidden = false; pw.focus();
@@ -13697,7 +13724,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
     function showGuide(name) {
       guide.innerHTML = ''; guide.hidden = false;
-      guide.appendChild(el('h3', null, '5. 기관 메일로 보내기'));
+      guide.appendChild(stepH('5', '기관 메일로 보내기'));
       guide.appendChild(el('p', 'big', `기관 메일에 ${name} 파일을 첨부해 팀원에게 보내세요. 비밀번호는 메일에 적지 마세요.`));
       const ol = el('ol');
       ['기관 메일 새 메일 → 받는 사람: 팀원', `첨부: 방금 내려받은 ${name} (다운로드 폴더)`, '본문: 아래 「메일 본문 복사」 → 붙여 넣기', '팀 비밀번호는 구두나 내부 메신저로만 전달'].forEach(t => ol.appendChild(el('li', null, t)));
@@ -14646,34 +14673,37 @@ $('#setBtn').addEventListener('click', () => {
   const sh = $('#sheet'); sh.innerHTML = '';
   sh.appendChild(el('h3', 'ptitle', '설정'));
   const close = fn => async () => { dlg.close(); await fn(); };
+  sh.appendChild(el('p', 'grp', '내 정보'));
   sh.appendChild(el('p', 'sub', `내 이름: ${T().myName || '(입력 안 함)'} · 보는 팀: ${visibleLists().map(id => T().lists[id].teamName).join(', ') || '없음'}`));
   const row = el('div', 'row');
   row.append(btn('btn', '내 이름 바꾸기', close(() => { T().nameAsked = false; persist(); renderList(); })),
     btn('btn', '팀 다시 고르기', close(() => { T().chosen = {}; T().myName = ''; T().nameAsked = false; persist(); renderList(); })));
   sh.appendChild(row);
+  sh.appendChild(el('p', 'grp', '보고서 받을 메일'));
   const ml = el('label', 'f', '보고서 받을 메일 주소 (선택, 이 휴대폰에만 저장)');
   const mi = document.createElement('input'); mi.type = 'email'; mi.id = 'reportToIn'; mi.value = app.settings.reportTo || ''; mi.placeholder = '예) 담당자 기관 메일 주소';
   mi.addEventListener('input', () => { app.settings.reportTo = mi.value.trim(); persist(); });
   ml.appendChild(mi); sh.appendChild(ml);
   if (listIds().length){
-    sh.appendChild(el('b', null, '불러온 목록'));
+    sh.appendChild(el('p', 'grp', '불러온 목록'));
     listIds().forEach(id => {
       const L = T().lists[id], r = el('div', 'lrow');
       r.append(el('span', null, `${listTitle(L)} · ${L.count}곳`), btn('btn sm dangertxt', '지우기', close(() => removeList(id))));
       sh.appendChild(r);
     });
   }
+  sh.appendChild(el('p', 'grp', '초기화'));
   sh.appendChild(btn('btn', '팀 비밀번호 다시 입력', close(async () => {
     keys = {}; await saveKeys(); setMsg('저장된 팀 비밀번호 키를 지웠습니다. 다음에 목록 파일을 불러올 때 비밀번호를 묻습니다.');
   })));
-  sh.appendChild(btn('btn dangertxt', '이 휴대폰에서 대상 목록·키 모두 지우기', close(async () => {
+  sh.appendChild(withIcon(btn('btn dangertxt wipeall', '이 휴대폰에서 대상 목록·키 모두 지우기', close(async () => {
     const rs = app.sites.filter(s => s.listId || s.slot != null), pc = rs.reduce((a, s) => a + photoCount(s), 0);
     if (!confirm(`팀 비밀번호 키와 메일로 받은 목록의 시설물 ${rs.length}곳${pc ? `(사진 ${pc}장 포함)` : ''}을 이 휴대폰에서 지울까요?`)) return;
     rs.forEach(s => sitePhotoIds(s).forEach(delPhoto));
     app.sites = app.sites.filter(s => !s.listId && s.slot == null); app.team = null; app.legacySlots = null;
     keys = {}; await saveKeys(); pendingFile = null; keyState = '';
     await persistNow(); renderList(); setMsg('대상 목록과 키를 지웠습니다.');
-  })));
+  })), 'trash'));
   sh.appendChild(btn('btn', '닫기', () => dlg.close()));
   dlg.oncancel = null; dlg.onclose = null;
   dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
@@ -14750,7 +14780,8 @@ async function openScanner(){
   const v = document.createElement('video'); v.setAttribute('playsinline', ''); v.muted = true; v.autoplay = true;
   const st = el('p', 'msg'); st.id = 'scanMsg'; st.setAttribute('role', 'status'); st.textContent = '카메라를 켜는 중…';
   const w = el('div', 'scan');
-  w.append(v, st, el('p', 'sub', '팀장 PC 화면이나 인쇄물의 QR을 비추세요. 여러 장이면 순서 상관없이 차례로 비추세요.'), btn('btn', '닫기', () => dlg.close()));
+  const vw = el('div', 'vwrap'); vw.appendChild(v);
+  w.append(vw, st, el('p', 'sub', '팀장 PC 화면이나 인쇄물의 QR을 비추세요. 여러 장이면 순서 상관없이 차례로 비추세요.'), btn('btn', '닫기', () => dlg.close()));
   sh.appendChild(w);
   dlg.oncancel = null; dlg.onclick = null;
   dlg.onclose = () => { if (scanStop) scanStop(); };
@@ -14805,7 +14836,8 @@ function showPreview(data, from){
   const ul = el('ul', 'plist');
   data.rows.forEach(r => {
     const li = el('li'); li.append(el('span', 'no', r.no), el('b', null, r.facility));
-    li.appendChild(el('span', 'sub', ' ' + [r.dateKey ? IMP.dayLabel(r.dateKey) : '', r.ampm, r.safetyGrade].filter(Boolean).join(' · ')));
+    li.appendChild(el('span', 'sub', ' ' + [r.dateKey ? IMP.dayLabel(r.dateKey) : '', r.ampm].filter(Boolean).join(' · ')));
+    if (r.safetyGrade){ const g = el('span', 'pgrade'); g.append(el('i', 'gdot grade-' + (/^[A-E]/i.test(r.safetyGrade) ? r.safetyGrade[0].toLowerCase() : 'x')), document.createTextNode(r.safetyGrade)); li.appendChild(g); }
     ul.appendChild(li);
   });
   sh.appendChild(ul);
@@ -14827,7 +14859,7 @@ function showPreview(data, from){
     });
     sh.appendChild(fs);
   }
-  const acts = el('div', 'row');
+  const acts = el('div', 'row sheetacts');
   const bNo = btn('btn', '취소', () => { dlg.close(); });
   const bOk = btn('btn primary', '등록', async () => {
     if (mode === 'replace'){

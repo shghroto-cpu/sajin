@@ -928,34 +928,37 @@ $('#setBtn').addEventListener('click', () => {
   const sh = $('#sheet'); sh.innerHTML = '';
   sh.appendChild(el('h3', 'ptitle', '설정'));
   const close = fn => async () => { dlg.close(); await fn(); };
+  sh.appendChild(el('p', 'grp', '내 정보'));
   sh.appendChild(el('p', 'sub', `내 이름: ${T().myName || '(입력 안 함)'} · 보는 팀: ${visibleLists().map(id => T().lists[id].teamName).join(', ') || '없음'}`));
   const row = el('div', 'row');
   row.append(btn('btn', '내 이름 바꾸기', close(() => { T().nameAsked = false; persist(); renderList(); })),
     btn('btn', '팀 다시 고르기', close(() => { T().chosen = {}; T().myName = ''; T().nameAsked = false; persist(); renderList(); })));
   sh.appendChild(row);
+  sh.appendChild(el('p', 'grp', '보고서 받을 메일'));
   const ml = el('label', 'f', '보고서 받을 메일 주소 (선택, 이 휴대폰에만 저장)');
   const mi = document.createElement('input'); mi.type = 'email'; mi.id = 'reportToIn'; mi.value = app.settings.reportTo || ''; mi.placeholder = '예) 담당자 기관 메일 주소';
   mi.addEventListener('input', () => { app.settings.reportTo = mi.value.trim(); persist(); });
   ml.appendChild(mi); sh.appendChild(ml);
   if (listIds().length){
-    sh.appendChild(el('b', null, '불러온 목록'));
+    sh.appendChild(el('p', 'grp', '불러온 목록'));
     listIds().forEach(id => {
       const L = T().lists[id], r = el('div', 'lrow');
       r.append(el('span', null, `${listTitle(L)} · ${L.count}곳`), btn('btn sm dangertxt', '지우기', close(() => removeList(id))));
       sh.appendChild(r);
     });
   }
+  sh.appendChild(el('p', 'grp', '초기화'));
   sh.appendChild(btn('btn', '팀 비밀번호 다시 입력', close(async () => {
     keys = {}; await saveKeys(); setMsg('저장된 팀 비밀번호 키를 지웠습니다. 다음에 목록 파일을 불러올 때 비밀번호를 묻습니다.');
   })));
-  sh.appendChild(btn('btn dangertxt', '이 휴대폰에서 대상 목록·키 모두 지우기', close(async () => {
+  sh.appendChild(withIcon(btn('btn dangertxt wipeall', '이 휴대폰에서 대상 목록·키 모두 지우기', close(async () => {
     const rs = app.sites.filter(s => s.listId || s.slot != null), pc = rs.reduce((a, s) => a + photoCount(s), 0);
     if (!confirm(`팀 비밀번호 키와 메일로 받은 목록의 시설물 ${rs.length}곳${pc ? `(사진 ${pc}장 포함)` : ''}을 이 휴대폰에서 지울까요?`)) return;
     rs.forEach(s => sitePhotoIds(s).forEach(delPhoto));
     app.sites = app.sites.filter(s => !s.listId && s.slot == null); app.team = null; app.legacySlots = null;
     keys = {}; await saveKeys(); pendingFile = null; keyState = '';
     await persistNow(); renderList(); setMsg('대상 목록과 키를 지웠습니다.');
-  })));
+  })), 'trash'));
   sh.appendChild(btn('btn', '닫기', () => dlg.close()));
   dlg.oncancel = null; dlg.onclose = null;
   dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
@@ -1032,7 +1035,8 @@ async function openScanner(){
   const v = document.createElement('video'); v.setAttribute('playsinline', ''); v.muted = true; v.autoplay = true;
   const st = el('p', 'msg'); st.id = 'scanMsg'; st.setAttribute('role', 'status'); st.textContent = '카메라를 켜는 중…';
   const w = el('div', 'scan');
-  w.append(v, st, el('p', 'sub', '팀장 PC 화면이나 인쇄물의 QR을 비추세요. 여러 장이면 순서 상관없이 차례로 비추세요.'), btn('btn', '닫기', () => dlg.close()));
+  const vw = el('div', 'vwrap'); vw.appendChild(v);
+  w.append(vw, st, el('p', 'sub', '팀장 PC 화면이나 인쇄물의 QR을 비추세요. 여러 장이면 순서 상관없이 차례로 비추세요.'), btn('btn', '닫기', () => dlg.close()));
   sh.appendChild(w);
   dlg.oncancel = null; dlg.onclick = null;
   dlg.onclose = () => { if (scanStop) scanStop(); };
@@ -1087,7 +1091,8 @@ function showPreview(data, from){
   const ul = el('ul', 'plist');
   data.rows.forEach(r => {
     const li = el('li'); li.append(el('span', 'no', r.no), el('b', null, r.facility));
-    li.appendChild(el('span', 'sub', ' ' + [r.dateKey ? IMP.dayLabel(r.dateKey) : '', r.ampm, r.safetyGrade].filter(Boolean).join(' · ')));
+    li.appendChild(el('span', 'sub', ' ' + [r.dateKey ? IMP.dayLabel(r.dateKey) : '', r.ampm].filter(Boolean).join(' · ')));
+    if (r.safetyGrade){ const g = el('span', 'pgrade'); g.append(el('i', 'gdot grade-' + (/^[A-E]/i.test(r.safetyGrade) ? r.safetyGrade[0].toLowerCase() : 'x')), document.createTextNode(r.safetyGrade)); li.appendChild(g); }
     ul.appendChild(li);
   });
   sh.appendChild(ul);
@@ -1109,7 +1114,7 @@ function showPreview(data, from){
     });
     sh.appendChild(fs);
   }
-  const acts = el('div', 'row');
+  const acts = el('div', 'row sheetacts');
   const bNo = btn('btn', '취소', () => { dlg.close(); });
   const bOk = btn('btn primary', '등록', async () => {
     if (mode === 'replace'){

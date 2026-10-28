@@ -6,6 +6,8 @@
   'use strict';
   const $ = s => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // 단계 제목: 번호를 span.step(원형 배지)으로 감쌈. 나머지 글자는 그대로
+  const stepH = (n, text) => { const h = el('h3', 'steph'); h.append(el('span', 'step', n), document.createTextNode(text)); return h; };
   const button = (cls, text, fn) => { const b = el('button', cls, text); b.type = 'button'; b.addEventListener('click', fn); return b; };
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
   function plainDownload(file) {
@@ -42,7 +44,7 @@
     const teamsUsed = () => { try { return JSON.parse(store.get('sajin.teams') || '[]').filter(x => typeof x === 'string'); } catch (e) { return []; } };
 
     // 1. 팀: 먼저 팀을 정하고(새 팀이면 이름 입력), 그 팀 비밀번호를 넣어야 만들 수 있다 (팀마다 비밀번호가 다름)
-    const s1 = el('section', 'block adm'); s1.appendChild(el('h3', null, '1. 팀'));
+    const s1 = el('section', 'block adm'); s1.appendChild(stepH('1', '팀'));
     s1.appendChild(el('p', 'sub', '목록을 만들 팀을 고르거나 새 팀 이름을 입력하세요.'));
     const tl = el('label', 'f', '팀 이름'); const tn = el('input'); tn.type = 'text'; tn.id = 'admTeam'; tn.placeholder = '예) 1팀 (부산권)';
     const dl = el('datalist'); dl.id = 'admTeams'; teamsUsed().forEach(t => { const o = el('option'); o.value = t; dl.appendChild(o); });
@@ -55,7 +57,7 @@
 
     // 2. 그 팀 비밀번호 (서버가 없어 맞는지 확인할 방법이 없으므로 두 번 입력)
     const sp = el('section', 'block adm'); sp.hidden = true;
-    const spT = el('h3'); const spS = el('p', 'sub');
+    const spT = el('h3', 'steph'); const spS = el('p', 'sub');
     const pw = el('input'); pw.type = 'password'; pw.id = 'admPass'; pw.autocomplete = 'off'; pw.setAttribute('aria-label', '팀 비밀번호');
     const pw2 = el('input'); pw2.type = 'password'; pw2.id = 'admPass2'; pw2.autocomplete = 'off'; pw2.placeholder = '한 번 더 입력'; pw2.setAttribute('aria-label', '팀 비밀번호 확인');
     const out1 = el('p', 'msg err'); out1.setAttribute('role', 'alert');
@@ -64,7 +66,7 @@
     sp.append(spT, spS, pw, pw2, ok1, out1);
 
     // 3. 엑셀 · (갱신이면) 이전 목록 파일
-    const s2 = el('section', 'block adm'); s2.hidden = true; s2.appendChild(el('h3', null, '3. 엑셀'));
+    const s2 = el('section', 'block adm'); s2.hidden = true; s2.appendChild(stepH('3', '엑셀'));
     const xi = el('input'); xi.type = 'file'; xi.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; xi.hidden = true;
     const pi = el('input'); pi.type = 'file'; pi.hidden = true;
     const pickXls = button('btn', '엑셀 선택 (.xlsx)', () => { xi.value = ''; xi.click(); }); pickXls.id = 'admXlsBtn';
@@ -82,7 +84,7 @@
     s2.append(pickXls, xi, prevBox, pickPrev, pi, prevInfo, diffBox, opts, warnT);
 
     // 3. 파일 만들기
-    const s3 = el('section', 'block adm'); s3.hidden = true; s3.appendChild(el('h3', null, '4. 목록 파일 또는 QR 만들기'));
+    const s3 = el('section', 'block adm'); s3.hidden = true; s3.appendChild(stepH('4', '목록 파일 또는 QR 만들기'));
     s3.appendChild(el('p', 'sub', '팀원이 PC 앞에 모여 있으면 「QR 만들기」(휴대폰 카메라로 찍기), 아니면 「목록 파일 만들기」(기관 메일 첨부).'));
     const out3 = el('p', 'msg'); out3.setAttribute('role', 'status');
     const mk = button('btn primary', '목록 파일 만들기', make); mk.id = 'admMake';
@@ -103,7 +105,7 @@
       const t = tn.value.trim().slice(0, 60);
       if (!t) { out0.textContent = '팀 이름을 입력하세요.'; tn.focus(); return; }
       team = t; tn.value = t; tn.readOnly = true; ok0.hidden = true; chg.hidden = false;
-      spT.textContent = `2. ${t} 비밀번호`;
+      spT.innerHTML = ''; spT.append(el('span', 'step', '2'), document.createTextNode(`${t} 비밀번호`));
       spS.textContent = teamsUsed().includes(t) ? `${t} 비밀번호를 두 번 입력하세요. 저장되지 않습니다.`
         : `${t} 비밀번호를 두 번 입력하세요. 처음 만드는 팀이면 지금 정한 비밀번호가 이 팀 비밀번호가 됩니다 (팀마다 다르게, 12자 이상). 팀원에게 구두나 내부 메신저로만 알려 주세요. 저장되지 않습니다.`;
       sp.hidden = false; pw.focus();
@@ -269,7 +271,7 @@
     window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
     function showGuide(name) {
       guide.innerHTML = ''; guide.hidden = false;
-      guide.appendChild(el('h3', null, '5. 기관 메일로 보내기'));
+      guide.appendChild(stepH('5', '기관 메일로 보내기'));
       guide.appendChild(el('p', 'big', `기관 메일에 ${name} 파일을 첨부해 팀원에게 보내세요. 비밀번호는 메일에 적지 마세요.`));
       const ol = el('ol');
       ['기관 메일 새 메일 → 받는 사람: 팀원', `첨부: 방금 내려받은 ${name} (다운로드 폴더)`, '본문: 아래 「메일 본문 복사」 → 붙여 넣기', '팀 비밀번호는 구두나 내부 메신저로만 전달'].forEach(t => ol.appendChild(el('li', null, t)));

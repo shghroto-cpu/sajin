@@ -230,10 +230,20 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .empty>b{font-size:17px;font-weight:700}
 .empty p{margin:6px 0 0;font-size:15px;color:var(--ink2)}
 .ptitle{margin:0;font-size:19px;font-weight:700}
-.plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
-.plist li{font-size:15px;display:flex;align-items:baseline;gap:6px}
-.plist .no{color:var(--ink2);font-size:13px;min-width:18px}
-.warnbox{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;flex-direction:column;gap:2px}
+.plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 12px}
+.plist li{font-size:14px;display:flex;align-items:center;gap:8px;min-height:44px;border-bottom:1px solid var(--line2)}
+.plist li:last-child{border-bottom:0}
+.plist li b{font-size:16px;font-weight:700}
+.plist .no{color:var(--soft);font-size:13px;font-weight:700;min-width:20px}
+.plist .sub{font-size:14px}
+.pgrade{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-weight:700;color:var(--ink2)}
+.gdot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--soft)}
+.gdot.grade-a{background:var(--g-a)}.gdot.grade-b{background:var(--g-b)}.gdot.grade-c{background:var(--g-c)}.gdot.grade-d,.gdot.grade-e{background:var(--g-alert)}
+.warnbox{background:var(--warn-bg);color:var(--warn-ink);border-left:4px solid var(--gold);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;flex-direction:column;gap:2px}
+.warnbox>b{font-weight:700}
+/* 설정 시트 묶음 소제목 */
+.grp{margin:8px 0 -6px;font-size:13px;font-weight:700;color:var(--soft)}
+.wipeall{margin-top:24px}
 .modes{border:1px solid var(--line);border-radius:8px;padding:8px 12px 10px;display:flex;flex-direction:column;gap:8px;margin:0}
 .modes legend{font-size:13px;color:var(--ink2);padding:0 4px}
 .linkbox{min-height:0;font-size:13px;word-break:break-all}
@@ -258,9 +268,14 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .others{margin-top:20px}
 .others>summary{cursor:pointer;font-weight:700;color:var(--accent);padding:8px 2px}
 /* 관리 화면 (#admin) */
-.adm{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.adm{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .adm h2,.adm h3{margin:0}
-.adm h2{font-size:19px}.adm h3{font-size:16px}
+.adm h2{font-size:19px;font-weight:700}.adm h3{font-size:17px;font-weight:700}
+/* 관리 화면 단계 번호: 남색 원형 배지 */
+.steph{display:flex;align-items:center;gap:10px}
+.steph .step{flex:none;width:28px;height:28px;border-radius:50%;background:var(--primary);color:var(--on-primary);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#admMake,#admQR{min-height:52px}
+.adm .msg{max-width:none;margin:0}
 .adm .sub{margin:0}
 .admprev{display:flex;flex-direction:column;gap:8px}
 .guide{border:2px solid var(--accent)}
@@ -313,8 +328,18 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .qrprog .chips span{border:1.5px dashed var(--line);border-radius:999px;padding:2px 10px;font-size:14px;font-weight:700;color:var(--soft)}
 .qrprog .chips span.got{background:var(--green);color:#fff;border-color:var(--green);font-weight:700}
 .scan{display:flex;flex-direction:column;gap:10px}
-.scan video{width:100%;max-height:60vh;background:#000;border-radius:8px;object-fit:cover}
-@media (min-width:900px){#adminView{max-width:960px}}
+.scan video{width:100%;max-height:60vh;background:#000;border-radius:12px;object-fit:cover;display:block}
+.vwrap{position:relative}
+.vwrap::after{content:"";position:absolute;left:50%;top:50%;width:58%;aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.75);border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.18);pointer-events:none;max-height:90%}
+#scanMsg{font-size:15px;font-weight:700}
+@media (min-width:900px){
+  #adminView{max-width:960px}
+  /* 관리 화면(PC): 앱 바 64px, 머리글 폭 = 본문 폭, 미리보기 2열 */
+  body:has(#adminView:not([hidden])) header.top{padding:12px 16px;position:relative;top:0}
+  body:has(#adminView:not([hidden])) header.top .inner{max-width:960px;padding:0 14px}
+  .adm .plist{display:grid;grid-template-columns:1fr 1fr;column-gap:20px;max-height:none}
+  .adm .plist li:nth-last-child(2):nth-child(odd){border-bottom:0}
+}
 [hidden]{display:none!important}
 @media (max-width:420px){.form{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
