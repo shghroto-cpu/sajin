@@ -65,13 +65,17 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 button,input,textarea,select{font:inherit;color:inherit}
 .wrap{max-width:720px;margin:0 auto;padding:0 14px 140px}
 
-header.top{background:var(--appbar);color:#fff;padding:18px 16px 16px;position:relative}
-header.top .inner{max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:12px}
+/* 앱 바: 그라데이션, 56px, 위에 붙어 있음 (긴 편집 화면에서도 「목록」에 바로 닿게) */
+header.top{background:var(--appbar);color:#fff;padding:8px 16px;position:sticky;top:env(safe-area-inset-top,0px);z-index:20}
+header.top .inner{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:10px;min-height:40px}
 header.top h1{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em}
-header.top p{margin:2px 0 0;font-size:13px;font-weight:500;color:#CFE0F5}
+header.top p{margin:1px 0 0;font-size:13px;font-weight:500;color:#CFE0F5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header.top h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header.top .grow{flex:1;min-width:0}
 header.top .stripe{display:none}
-.ghost{background:transparent;border:1px solid #5D7590;color:#fff;border-radius:8px;padding:6px 12px;font-size:14px;cursor:pointer}
+.ghost{flex:none;min-height:40px;background:transparent;border:1px solid rgba(255,255,255,.45);color:#fff;border-radius:var(--r-btn);padding:6px 12px 6px 8px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap}
+.ghost:active{background:rgba(255,255,255,.14)}
+#setBtn{padding:6px 12px 6px 10px}
 
 .block{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);margin-top:12px;box-shadow:var(--shadow)}
 details.block>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:700}
@@ -112,7 +116,9 @@ button:focus-visible,summary:focus-visible,a:focus-visible,.pick:focus-within{ou
 .ph .n{position:absolute}
 .add{margin-top:12px;width:100%;border:2px dashed var(--line);background:transparent;border-radius:10px;padding:14px;font-weight:700;color:var(--accent);cursor:pointer;font-size:15px}
 .add.busy{color:var(--ink2)}
-.addsec{margin-top:14px;width:100%;background:transparent;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--ink);cursor:pointer;font-weight:500}
+.addsec{margin-top:14px;width:100%;min-height:48px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-btn);padding:10px 12px;color:var(--ink);cursor:pointer;font-size:15px;font-weight:700}
+.addsec.dangertxt{color:var(--error)}
+#clearListBtn,#resetBtn{margin-top:32px}
 
 .bar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
   padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));z-index:5}
@@ -155,18 +161,39 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 [data-icon]::before{content:"";flex:none;width:20px;height:20px;background:currentColor;-webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
 
 /* 대상 목록 화면 */
-.lhead{padding:14px 16px;display:flex;flex-direction:column;gap:8px}
-.lhead .batch{margin:0 0 2px;font-size:15px}
-.lhead .batch span{color:var(--ink2);font-size:14px}
-#lmsg{margin:10px 2px 0}
-.day{font-size:17px;font-weight:700;margin:20px 2px 0;display:flex;align-items:center;gap:6px}
+.lhead{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.lhead .batch{margin:0 0 2px;font-size:17px}
+.lhead .batch b{font-weight:700}
+#batchCount{color:var(--gold-ink);font-weight:700;font-size:15px}
+.hero-q{display:none;margin:0;font-size:20px;font-weight:700;line-height:1.4}
+/* (가) 목록이 없을 때: 그라데이션 시작 카드 + 흰 타일 두 개 */
+#listView:not(.has-list) .lhead{background:var(--appbar);color:#fff;border:0;border-radius:16px;padding:20px 18px}
+#listView:not(.has-list) .hero-q{display:block}
+#listView:not(.has-list) .lhead .batch{display:none}
+#listView:not(.has-list) .lhead .sub{font-size:15px;color:rgba(255,255,255,.85)}
+#listView:not(.has-list) #qrBtn,#listView:not(.has-list) #listFileBtn{flex-direction:column;gap:8px;min-height:96px;background:#fff;color:var(--navy-deep);border:0;font-size:16px}
+#listView:not(.has-list) #qrBtn::before,#listView:not(.has-list) #listFileBtn::before{width:28px;height:28px}
+#listView:not(.has-list) #manualBtn{background:transparent;color:#fff;border-color:rgba(255,255,255,.55)}
+/* (나) 목록이 있을 때: 흰 카드, 불러오기 버튼은 보조 버튼으로 낮춤 */
+#listView.has-list #qrBtn,#listView.has-list #listFileBtn{background:var(--panel);color:var(--ink);border-color:var(--line);min-height:48px;padding:10px;font-size:15px}
+#listView.has-list .lhead>.sub{display:none}
+#listView.has-list #manualBtn{min-height:40px;border:0;background:none;color:var(--accent);font-size:14px}
+#lmsg{margin:10px 0 0}
+.day{font-size:17px;font-weight:700;margin:24px 2px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .day span{font-weight:700;color:var(--gold-ink);font-size:15px}
+.day .saved{margin-left:auto;color:var(--soft);font-size:14px}
+.day .saved.all{color:var(--green)}
 .day .today{font-style:normal;font-size:13px;font-weight:700;background:var(--gold);color:#1C2733;border-radius:999px;padding:1px 8px}
+/* 시설물 카드 */
 .site{margin-top:8px;overflow:hidden}
-.site.removed{opacity:.7;border-style:dashed}
-.site-open{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;background:transparent;border:0;padding:12px 14px 10px;cursor:pointer}
+.site.is-done{box-shadow:inset 4px 0 0 var(--green),var(--shadow)}
+.site.is-doing{box-shadow:inset 4px 0 0 var(--accent),var(--shadow)}
+.site:has(.site-open:active){border-color:var(--accent)}
+.site.removed{opacity:.75;border-style:dashed}
+.site-open{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;background:transparent;border:0;padding:14px 12px 12px 16px;cursor:pointer}
 .st1{display:flex;align-items:center;gap:8px;min-width:0}
-.st1 .no{flex:none;min-width:24px;height:24px;border-radius:6px;background:var(--primary);color:var(--on-primary);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.st1 .chev{flex:none;color:var(--soft)}
+.st1 .no{flex:none;min-width:26px;height:26px;border-radius:6px;background:var(--primary);color:var(--on-primary);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px}
 .st1 .nm{flex:1;min-width:0;font-size:17px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tags{flex:none;display:flex;gap:4px}
 .tag{display:inline-flex;align-items:center;height:24px;font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:6px;padding:0 7px;color:var(--ink2);white-space:nowrap}
@@ -186,11 +213,12 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .st3 .state.done{background:var(--ok-bg);color:var(--ok-ink)}
 .st3 .state.done::before{content:"✓"}
 .st3 .who{color:var(--ink2)}
-.acts{display:flex;gap:6px;justify-content:flex-end;padding:0 12px 10px}
+.acts{display:flex;gap:6px;justify-content:flex-end;padding:8px 12px 10px;border-top:1px solid var(--line2)}
 .btn.sm{min-height:40px;padding:6px 12px;font-size:14px;flex:none}
 .dangertxt{color:var(--error)}
 .empty{padding:18px 16px}
-.empty p{margin:6px 0 0;font-size:14px;color:var(--ink2)}
+.empty>b{font-size:17px;font-weight:700}
+.empty p{margin:6px 0 0;font-size:15px;color:var(--ink2)}
 .ptitle{margin:0;font-size:19px;font-weight:700}
 .plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .plist li{font-size:15px;display:flex;align-items:baseline;gap:6px}
@@ -202,15 +230,20 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 /* 대상목록 파일(.sajin) */
 .sync{margin:0;font-size:13px;color:var(--ink2)}
 .linkbtn{background:none;border:0;padding:4px 6px;min-height:40px;color:var(--accent);font-size:14px;font-weight:700;cursor:pointer;text-decoration:none}
-.keycard{padding:16px;display:flex;flex-direction:column;gap:10px;border:2px solid var(--accent)}
-.keycard>b{font-size:17px}
+.keycard{padding:16px;display:flex;flex-direction:column;gap:12px;border-top:4px solid var(--accent)}
+.keycard>b{font-size:18px;font-weight:700}
+.keycard>b[data-icon]{justify-content:flex-start;color:var(--ink)}
+.keycard>b[data-icon]::before{color:var(--accent)}
+.keycard>.linkbtn{align-self:center}
+.inrow>input,.inrow>button{min-height:48px}
 .keycard .sub{margin:0}
 .keycard .msg{margin:0}
 .inrow>input{flex:2}
 .inrow>button{flex:1}
-.pick{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
-.pick input{width:20px;height:20px;margin-top:2px;accent-color:var(--accent);flex:none}
-.pick .sub{display:block;font-size:13px;color:var(--ink2)}
+.pick{display:flex;gap:10px;align-items:center;min-height:56px;border:1px solid var(--line);border-radius:var(--r-btn);padding:10px 12px;cursor:pointer}
+.pick:has(input:checked){border-color:var(--accent);background:var(--tint)}
+.pick input{width:24px;height:24px;margin:0;accent-color:var(--accent);flex:none}
+.pick .sub{display:block;font-size:14px;color:var(--soft)}
 .tag.team{background:var(--tint);border-color:transparent;color:var(--accent)}
 .others{margin-top:20px}
 .others>summary{cursor:pointer;font-weight:700;color:var(--accent);padding:8px 2px}
@@ -224,7 +257,10 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 .guide .big{font-size:17px;font-weight:700;margin:0}
 .mailbody{font-size:14px;min-height:0}
 .btn.big{padding:15px 12px;font-size:17px}
-.steps{margin:10px 0 0;padding-left:22px;font-size:15px;display:flex;flex-direction:column;gap:4px}
+/* 순서가 있는 안내: 남색 번호 동그라미 */
+.steps{margin:12px 0 0;padding:0;list-style:none;counter-reset:st;font-size:15px;display:flex;flex-direction:column;gap:10px}
+.steps li{counter-increment:st;display:flex;gap:10px;align-items:flex-start}
+.steps li::before{content:counter(st);flex:none;width:24px;height:24px;border-radius:50%;background:var(--primary);color:var(--on-primary);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
 .lrow{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;font-size:14px}
 #listInfo{display:flex;flex-wrap:wrap;gap:4px 10px}
 .guide ol{margin:6px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
@@ -264,7 +300,7 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 }
 /* 휴대폰: QR 받는 중 · QR 찍기 */
 .qrprog .chips{display:flex;gap:6px;flex-wrap:wrap}
-.qrprog .chips span{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:14px}
+.qrprog .chips span{border:1.5px dashed var(--line);border-radius:999px;padding:2px 10px;font-size:14px;font-weight:700;color:var(--soft)}
 .qrprog .chips span.got{background:var(--green);color:#fff;border-color:var(--green);font-weight:700}
 .scan{display:flex;flex-direction:column;gap:10px}
 .scan video{width:100%;max-height:60vh;background:#000;border-radius:8px;object-fit:cover}
@@ -276,14 +312,14 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
 </head>
 <body>
 <header class="top"><div class="inner">
-  <button class="ghost" id="backBtn" type="button" hidden>← 목록</button>
+  <button class="ghost" id="backBtn" type="button" hidden data-icon="back">목록</button>
   <div class="grow"><h1>사실관계조사</h1><p id="hdrSub">대상 목록</p></div>
-  <button class="ghost" id="resetBtn" type="button" hidden>보고서 비우기</button>
-  <button class="ghost" id="setBtn" type="button" hidden aria-label="설정">⋯</button>
+  <button class="ghost" id="setBtn" type="button" hidden aria-label="설정" data-icon="gear">설정</button>
 </div><div class="stripe"></div></header>
 
 <main class="wrap" id="listView" hidden>
   <section class="block lhead">
+    <p class="hero-q">오늘 점검할 대상 목록을 불러올까요?</p>
     <p class="batch"><b id="batchName">대상 목록</b> <span id="batchCount"></span></p>
     <p class="sync" id="listInfo" hidden></p>
     <div class="row"><button class="btn primary big" id="qrBtn" type="button" data-icon="qr">QR 찍기</button><button class="btn primary big" id="listFileBtn" type="button" data-icon="file">목록 파일 불러오기</button></div>
@@ -307,6 +343,7 @@ dialog::backdrop{background:rgba(5,15,30,.55)}
   </details>
   <div id="sections"></div>
   <button class="addsec" id="addSecBtn" type="button" data-icon="plus">점검 항목 추가</button>
+  <button class="addsec dangertxt reset" id="resetBtn" type="button" hidden data-icon="trash">이 보고서 비우기</button>
   <p class="sub" style="margin-top:14px">사진과 입력 내용은 이 휴대폰 브라우저에만 저장되며, 어디에도 업로드되지 않습니다.<br>앱 버전 2026.10.30-H</p>
 </main>
 
@@ -14293,6 +14330,7 @@ function renderList(){
   const blocking = renderTeamCards(), vis = blocking ? [] : visibleLists(), ids = listIds(), L = T().lists;
   const shown = app.sites.filter(s => !s.listId || vis.includes(s.listId));
   const others = blocking ? [] : app.sites.filter(s => s.listId && !vis.includes(s.listId));
+  $('#listView').classList.toggle('has-list', shown.length > 0);   // 목록이 없으면 시작 카드, 있으면 작고 단정하게 (CSS)
   if (vis.length){
     const t = vis.map(id => L[id]);
     $('#hdrSub').textContent = shortBatch(t[0].batchName) || '대상 목록';
@@ -14323,6 +14361,8 @@ function renderList(){
   IMP.groupByDate(shown, localKey(new Date())).forEach(g => {
     const h = el('h2', 'day', g.label); h.appendChild(el('span', null, ` ${g.sites.length}곳`));
     if (g.today) h.appendChild(el('em', 'today', '오늘'));
+    const sv = g.sites.filter(s => s.savedAt).length;   // 화면 표시만: 그 날짜 중 저장한 수
+    h.appendChild(el('span', 'saved' + (sv === g.sites.length ? ' all' : ''), `저장 ${sv}/${g.sites.length}`));
     box.appendChild(h);
     g.sites.forEach(s => box.appendChild(siteCard(s, tagOf(s))));
   });
@@ -14339,7 +14379,7 @@ function renderList(){
   }
 }
 function siteCard(s, team){
-  const m = s.meta, card = el('article', 'block site' + (s.removed ? ' removed' : ''));
+  const m = s.meta, card = el('article', 'block site' + (s.removed ? ' removed' : '') + (s.savedAt ? ' is-done' : photoCount(s) ? ' is-doing' : ''));
   const open = el('button', 'site-open'); open.type = 'button';
   const l1 = el('div', 'st1');
   l1.append(el('span', 'no', s.no || '·'), el('b', 'nm', m.facility || '(시설물명 없음)'));
@@ -14349,7 +14389,7 @@ function siteCard(s, team){
   if (m.grade) tags.appendChild(el('span', 'tag jong jong-' + (/1/.test(m.grade) ? '1' : /2/.test(m.grade) ? '2' : '3'), m.grade));
   // 안전등급: 등급별 고정색 (D·E 는 .alert 도 유지), 종별: 테두리만 있는 태그
   if (sg) tags.appendChild(el('span', 'tag grade grade-' + (/^[A-E]/i.test(sg) ? sg[0].toLowerCase() : 'x') + (/^[DE]/i.test(sg) ? ' alert' : ''), sg));
-  l1.appendChild(tags);
+  l1.append(tags, withIcon(el('span', 'chev'), 'chev'));
   const l2 = el('div', 'st2', [m.location, s.buildings ? s.buildings + '개동' : '', s.src && s.src.ampm].filter(Boolean).join(' · '));
   const l3 = el('div', 'st3');
   const pc = photoCount(s);
@@ -14525,6 +14565,7 @@ function keyCard(){
   const c = keyState === 'other'
     ? card('이 목록의 팀 비밀번호를 입력하세요', '다른 팀 목록이거나 팀 비밀번호가 바뀌었습니다. 이 목록 팀의 비밀번호를 입력하세요 (팀마다 다릅니다). 휴대폰의 사진·작성 내용은 그대로 있습니다.' + qrNote)
     : card('팀 비밀번호를 입력하세요', '우리 팀 비밀번호를 입력하세요 (팀마다 다릅니다). 처음 받는 목록은 한 번 입력해야 등록됩니다 (같은 목록의 새 판은 다시 묻지 않음). 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.' + qrNote);
+  c.firstChild.dataset.icon = 'lock';
   const i = document.createElement('input'); i.type = 'password'; i.id = 'passIn'; i.autocomplete = 'current-password'; i.setAttribute('aria-label', '팀 비밀번호');
   const out = el('p', 'msg err'); out.setAttribute('role', 'alert');
   const b = btn('btn primary', '확인', () => submitPass(i.value, out, b));

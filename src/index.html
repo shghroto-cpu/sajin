@@ -11,14 +11,14 @@
 </head>
 <body>
 <header class="top"><div class="inner">
-  <button class="ghost" id="backBtn" type="button" hidden>← 목록</button>
+  <button class="ghost" id="backBtn" type="button" hidden data-icon="back">목록</button>
   <div class="grow"><h1>사실관계조사</h1><p id="hdrSub">대상 목록</p></div>
-  <button class="ghost" id="resetBtn" type="button" hidden>보고서 비우기</button>
-  <button class="ghost" id="setBtn" type="button" hidden aria-label="설정">⋯</button>
+  <button class="ghost" id="setBtn" type="button" hidden aria-label="설정" data-icon="gear">설정</button>
 </div><div class="stripe"></div></header>
 
 <main class="wrap" id="listView" hidden>
   <section class="block lhead">
+    <p class="hero-q">오늘 점검할 대상 목록을 불러올까요?</p>
     <p class="batch"><b id="batchName">대상 목록</b> <span id="batchCount"></span></p>
     <p class="sync" id="listInfo" hidden></p>
     <div class="row"><button class="btn primary big" id="qrBtn" type="button" data-icon="qr">QR 찍기</button><button class="btn primary big" id="listFileBtn" type="button" data-icon="file">목록 파일 불러오기</button></div>
@@ -42,6 +42,7 @@
   </details>
   <div id="sections"></div>
   <button class="addsec" id="addSecBtn" type="button" data-icon="plus">점검 항목 추가</button>
+  <button class="addsec dangertxt reset" id="resetBtn" type="button" hidden data-icon="trash">이 보고서 비우기</button>
   <p class="sub" style="margin-top:14px">사진과 입력 내용은 이 휴대폰 브라우저에만 저장되며, 어디에도 업로드되지 않습니다.<br>앱 버전 @@VERSION@@</p>
 </main>
 

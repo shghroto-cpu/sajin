@@ -635,6 +635,7 @@ function renderList(){
   const blocking = renderTeamCards(), vis = blocking ? [] : visibleLists(), ids = listIds(), L = T().lists;
   const shown = app.sites.filter(s => !s.listId || vis.includes(s.listId));
   const others = blocking ? [] : app.sites.filter(s => s.listId && !vis.includes(s.listId));
+  $('#listView').classList.toggle('has-list', shown.length > 0);   // 목록이 없으면 시작 카드, 있으면 작고 단정하게 (CSS)
   if (vis.length){
     const t = vis.map(id => L[id]);
     $('#hdrSub').textContent = shortBatch(t[0].batchName) || '대상 목록';
@@ -665,6 +666,8 @@ function renderList(){
   IMP.groupByDate(shown, localKey(new Date())).forEach(g => {
     const h = el('h2', 'day', g.label); h.appendChild(el('span', null, ` ${g.sites.length}곳`));
     if (g.today) h.appendChild(el('em', 'today', '오늘'));
+    const sv = g.sites.filter(s => s.savedAt).length;   // 화면 표시만: 그 날짜 중 저장한 수
+    h.appendChild(el('span', 'saved' + (sv === g.sites.length ? ' all' : ''), `저장 ${sv}/${g.sites.length}`));
     box.appendChild(h);
     g.sites.forEach(s => box.appendChild(siteCard(s, tagOf(s))));
   });
@@ -681,7 +684,7 @@ function renderList(){
   }
 }
 function siteCard(s, team){
-  const m = s.meta, card = el('article', 'block site' + (s.removed ? ' removed' : ''));
+  const m = s.meta, card = el('article', 'block site' + (s.removed ? ' removed' : '') + (s.savedAt ? ' is-done' : photoCount(s) ? ' is-doing' : ''));
   const open = el('button', 'site-open'); open.type = 'button';
   const l1 = el('div', 'st1');
   l1.append(el('span', 'no', s.no || '·'), el('b', 'nm', m.facility || '(시설물명 없음)'));
@@ -691,7 +694,7 @@ function siteCard(s, team){
   if (m.grade) tags.appendChild(el('span', 'tag jong jong-' + (/1/.test(m.grade) ? '1' : /2/.test(m.grade) ? '2' : '3'), m.grade));
   // 안전등급: 등급별 고정색 (D·E 는 .alert 도 유지), 종별: 테두리만 있는 태그
   if (sg) tags.appendChild(el('span', 'tag grade grade-' + (/^[A-E]/i.test(sg) ? sg[0].toLowerCase() : 'x') + (/^[DE]/i.test(sg) ? ' alert' : ''), sg));
-  l1.appendChild(tags);
+  l1.append(tags, withIcon(el('span', 'chev'), 'chev'));
   const l2 = el('div', 'st2', [m.location, s.buildings ? s.buildings + '개동' : '', s.src && s.src.ampm].filter(Boolean).join(' · '));
   const l3 = el('div', 'st3');
   const pc = photoCount(s);
@@ -867,6 +870,7 @@ function keyCard(){
   const c = keyState === 'other'
     ? card('이 목록의 팀 비밀번호를 입력하세요', '다른 팀 목록이거나 팀 비밀번호가 바뀌었습니다. 이 목록 팀의 비밀번호를 입력하세요 (팀마다 다릅니다). 휴대폰의 사진·작성 내용은 그대로 있습니다.' + qrNote)
     : card('팀 비밀번호를 입력하세요', '우리 팀 비밀번호를 입력하세요 (팀마다 다릅니다). 처음 받는 목록은 한 번 입력해야 등록됩니다 (같은 목록의 새 판은 다시 묻지 않음). 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.' + qrNote);
+  c.firstChild.dataset.icon = 'lock';
   const i = document.createElement('input'); i.type = 'password'; i.id = 'passIn'; i.autocomplete = 'current-password'; i.setAttribute('aria-label', '팀 비밀번호');
   const out = el('p', 'msg err'); out.setAttribute('role', 'alert');
   const b = btn('btn primary', '확인', () => submitPass(i.value, out, b));
