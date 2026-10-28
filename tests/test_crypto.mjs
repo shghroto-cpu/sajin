@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { I, X, LC, JSZip } from '../scripts/listlib.mjs';
+import { I, X, LC, JSZip, teamFileName } from '../scripts/listlib.mjs';
 
 const PASS = 'test-only-passphrase-0000', PASS2 = 'test-only-new-passphrase-1111';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -105,6 +105,11 @@ try {
   assert.equal(fN.kdf.saltId, '2026B');
   assert.ok(await LC.decryptList(await LC.deriveKey(PASS2, LC.saltById(cfgR, '2026B').salt), fN), '새 파일은 새 비밀번호');
   // 이전 목록이 이전 비밀번호로 만들어졌으면 --prev 는 안내 후 중단
-  assert.match(run('publish_list.mjs', xl, '--team-name', 'x', '--prev', prevPath).out, /지금 비밀번호로 열리지 않습니다/);
+  assert.match(run('publish_list.mjs', xl, '--team-name', 'x', '--prev', prevPath).out, /x 비밀번호로 열리지 않습니다/);
+  // 팀마다 비밀번호 파일이 따로: list-passphrase-<팀>.txt (환경변수 없이 실행하면 그 파일 이름을 안내)
+  assert.equal(teamFileName('1팀 (부산권)'), 'list-passphrase-1팀부산권.txt');
+  const env2 = Object.assign({}, env); delete env2.SAJIN_PASSFILE;
+  const r2 = spawnSync(process.execPath, [join(ROOT, 'scripts', 'publish_list.mjs'), xl, '--team-name', '없는시험팀 (가상)'], { env: env2, encoding: 'utf8' });
+  assert.match(r2.stdout + r2.stderr, /list-passphrase-없는시험팀가상\.txt/, '팀 비밀번호 파일 이름 안내');
 } finally { rmSync(tmp, { recursive: true, force: true }); }
 console.log('암호화 테스트 통과: .sajin 왕복·틀린 비밀번호·평문 노출 없음·listId 판 비교·솔트 2개·만들기 스크립트(저장소 밖)·비밀번호 교체');

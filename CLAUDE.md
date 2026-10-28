@@ -1,4 +1,4 @@
-# CLAUDE.md — 현장 사진대지 웹앱
+# CLAUDE.md — 사실관계조사 웹앱 (예전 이름: 현장 사진대지)
 
 이 파일은 Claude Code가 이 저장소에서 작업할 때 먼저 읽는 안내서다.
 
@@ -44,7 +44,7 @@ scripts/
   prepare_template.py   원본 .hwpx → template/tpl.json, base.b64
   listlib.mjs           대상목록 스크립트 공통 (솔트 목록, 비밀번호 파일 읽기, 저장소 안 경로 거부)
   publish_list.mjs      엑셀 → .sajin (엑셀과 같은 폴더 = 저장소 밖, git 작업 없음) (npm run publish-list)
-  rotate_passphrase.mjs 팀 비밀번호 교체 = crypto.json 에 새 솔트 추가 (npm run rotate-key)
+  rotate_passphrase.mjs 모든 팀 키 한꺼번에 교체 = crypto.json 에 새 솔트 추가 (npm run rotate-key). 팀 하나 비밀번호 변경엔 불필요
   check_safe_to_commit.mjs  커밋 전 검사 (.githooks/pre-commit 에서 자동 실행): 엑셀·비밀번호·.sajin·data/lists/·전화번호 차단
 data/
   crypto.json           솔트 목록만 (비밀 아님): {v:2, iter, salts:[{id:'2026A', salt}]} — 마지막이 현재 솔트. 빌드 때 앱에 내장
@@ -71,7 +71,7 @@ npm run build               # index.html 다시 만들기
 npm test                    # 빌드 + 엑셀 불러오기 테스트 + 샘플 HWPX 생성 + 구조 검사
 npm run fixtures            # 가짜 대상목록 엑셀 다시 만들기 (openpyxl)
 npm run publish-list -- "<엑셀경로>" --team-name "3팀 (부산권)" [--prev "<이전 .sajin>"] [--txt]   # 목록 파일 만들기
-npm run rotate-key          # 팀 비밀번호 교체 (새 솔트 추가 → 빌드·배포)
+npm run rotate-key          # 모든 팀 키 교체 (새 솔트 추가 → 빌드·배포)
 python3 tests/e2e_browser.py   # (선택) 브라우저 흐름 테스트, playwright 필요
 npm run template -- template/source/<원본>.hwpx   # 양식이 바뀌었을 때만
 ```
@@ -117,13 +117,14 @@ secOpen → head(표지~"개 요", {{DATE}})
   (지시서 2의 서버 팀 칸 방식 `data/lists/`는 폐지. 저장소 이력에 올라간 적 없음 — 2026-10-28 확인)
 - 파일: `{type:'sajin-list', v:2, alg, kdf:{name, iter, saltId}, keyCheck, iv, ct, createdAt}` — 평문은 createdAt·saltId 뿐. 100KB 이하.
   내용: `{listId, listVersion, team:{name, members}, batch:{id, name, dates}, sites:[importer 행]}`. 같은 목록을 고쳐 다시 보낼 땐 이전 파일로 listId 이어받기(`--prev`, 관리 화면 「이전 목록 파일 불러오기」).
-- 암호화: AES-256-GCM, PBKDF2-SHA256 600,000회, 파일마다 IV 새로, `keyCheck`로 틀린 비밀번호 즉시 판별. 비밀번호는 **실 공통 1개**, 12자 이상.
+- 암호화: AES-256-GCM, PBKDF2-SHA256 600,000회, 파일마다 IV 새로, `keyCheck`로 틀린 비밀번호 즉시 판별. 비밀번호는 **팀마다 따로**(1팀 비밀번호, 2팀 비밀번호 …), 12자 이상. 관리 화면은 「1. 팀 → 2. 그 팀 비밀번호(두 번) → 3. 엑셀 → 4. 파일·QR」 순서이고, 비밀번호를 아는 팀원이면 누구나 만든다 (이 PC에서 쓴 팀 이름만 localStorage `sajin.teams`에 기억, 비밀번호는 저장 안 함).
+  휴대폰 키는 `kv/listKeys` `{솔트 이름:[{key, addedAt}, …]}` — 팀 키 여러 개를 차례로 맞춰 보고, 맞는 키가 없으면 「이 목록의 팀 비밀번호를 입력하세요」. (예전 형식 `{솔트:{key}}`는 읽을 때 배열로 바꿈)
 - 솔트는 `data/crypto.json`을 **빌드 때 앱·관리 파일에 내장**(`window.SAJIN_CRYPTO`). 비밀번호 교체 = 새 솔트 추가 → 빌드 → 배포. 이전 솔트는 이전 파일용으로 남김.
 - 휴대폰: 비밀번호는 저장하지 않고 솔트별 **추출 불가 CryptoKey**만 IndexedDB `kv/listKeys`에. 현재 솔트 키를 받은 지 2주 지나면 이전 솔트 키 삭제. `app.team = {lists:{listId:…}, myName, nameAsked, chosen}`.
 - 병합: listId + 시설물명 + 날짜(`applyListFile`). 같은 listId 새 판은 `edited`·사진 보존·빠진 것 "목록에서 빠짐", 같은 판·옛 판은 무시. 지시서 2 방식으로 받은 시설물(`slot`)은 「이전 방식으로 받은 목록」 표시 후 같은 팀 목록 파일을 열면 이어받음.
 - 파일 선택 칸에 `accept`를 넣지 않는다(아이폰에서 .sajin 이 흐리게 막힘). 내용으로 판별: zip이면 엑셀(비상용), `type:'sajin-list'`면 목록, 아니면 "대상목록 파일이 아닙니다".
 - 평문 공유 링크(`#list=`)는 폐지 — 열면 미지원 안내만.
-- **비밀번호 파일 `list-passphrase.txt`는 Claude Code가 절대 열거나 출력하지 않는다** (cat·Read 금지, 스크립트만 읽음). 비밀번호를 대화·커밋 메시지·로그에 남기지 않는다.
+- **팀 비밀번호 파일 `list-passphrase-<팀>.txt`(예전 `list-passphrase.txt` 포함)는 Claude Code가 절대 열거나 출력하지 않는다** (cat·Read 금지, 스크립트만 읽음). 비밀번호를 대화·커밋 메시지·로그에 남기지 않는다.
 
 ## 대상목록 QR (지시서 4) — `docs/대상목록_QR등록_개발지시서.md`
 - 메일 파일 방식은 그대로 두고, 관리 화면 「QR 만들기」로 같은 암호화 목록을 QR 로 보여주거나 인쇄(A4 최대 4장, 「QR만 작게(4cm)」). 인쇄물에 시설물명·주소 글자 없음.
@@ -141,7 +142,9 @@ secOpen → head(표지~"개 요", {{DATE}})
 2. `npm run publish-list -- "<경로>" --team-name "…"` (같은 목록 갱신이면 `--prev "<이전 .sajin>"`, 메일이 .sajin 을 막으면 `--txt`) → 미리보기를 보여주고 **확인**받기 (`--dry-run`으로 먼저 미리보기 가능)
 3. 만들어진 파일 경로(엑셀과 같은 폴더)를 알려주고 "기관 메일에 첨부해 팀원에게 보내세요. 비밀번호는 메일에 적지 마세요" 안내
 - **git 작업 없음.** `.sajin`·엑셀은 절대 커밋하지 않는다(훅이 막음). `git add -A`, `git add .` 금지 — 파일을 하나씩 지정해서 add.
-- 비밀번호 교체: 담당자가 새 비밀번호를 `list-passphrase.txt`에 저장 → `npm run rotate-key` → `npm run build` → `git add data/crypto.json index.html` → 커밋 → push
+- 팀 비밀번호 파일: `list-passphrase-<팀 이름에서 공백·괄호 등 뺌>.txt` (예: 「1팀 (부산권)」 → `list-passphrase-1팀부산권.txt`). 없으면 스크립트가 만들 파일 이름을 안내.
+- 팀 하나 비밀번호 변경: 담당자가 그 팀 파일을 새 비밀번호로 다시 저장하면 끝 (배포 불필요).
+- 모든 팀 키 교체(드묾): `npm run rotate-key` → `npm run build` → `git add data/crypto.json index.html` → 커밋 → push
 
 ## 알려진 휴대폰 제약 (중요)
 - **아이폰은 한 번 누를 때 파일을 하나만 내려받는다.** 저장은 항상 zip 하나(보고서 + `사진/` 폴더)로 만든다.

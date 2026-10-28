@@ -15,13 +15,13 @@
   const appUrl = () => /^https?:$/.test(location.protocol) ? location.href.split('#')[0] : (root.SAJIN_APP_URL || '');
   function mailBody() {
     const u = appUrl();
-    return ['[현장 사진대지] 대상목록 파일 안내', '',
+    return ['[사실관계조사] 대상목록 파일 안내', '',
       '첨부한 대상목록 파일을 휴대폰 앱에 불러와 주세요.',
       '1. 휴대폰 사파리로 기관 웹메일에 들어가 첨부파일 내려받기 (파일 앱 › 다운로드에 저장됨.',
       '   글자로 화면에 열리면 공유 버튼 → 「파일에 저장」)',
       `2. 앱 주소를 사파리·크롬으로 열기${u ? ': ' + u : ''}`,
       '   → 「목록 파일 불러오기」 → 저장한 파일 선택',
-      '3. 처음이면 팀 비밀번호(구두로 전달받은 것)와 내 이름을 입력하면 우리 팀 목록이 보입니다.', '',
+      '3. 처음이면 우리 팀 비밀번호(구두로 전달받은 것, 팀마다 다름)와 내 이름을 입력하면 우리 팀 목록이 보입니다.', '',
       '※ 비밀번호는 이 메일에 적지 않습니다.'].join('\n');
   }
 
@@ -30,28 +30,41 @@
     const LC = root.SajinListCrypto, I = root.SajinImport, CFG = env.crypto || root.SAJIN_CRYPTO;
     const v = $('#adminView'); v.innerHTML = '';
     const intro = el('section', 'block adm');
-    intro.append(el('h2', null, '대상목록 파일 만들기 (팀장용)'),
-      el('p', 'sub', '팀 대상목록 엑셀을 팀 비밀번호로 암호화한 목록 파일(.sajin)로 만듭니다. 만든 파일은 기관 메일에 첨부해 팀원에게 보내세요. 엑셀과 비밀번호는 이 PC 밖으로 나가지 않으며 저장되지 않습니다 (화면을 닫으면 사라짐).'));
+    intro.append(el('h2', null, '대상목록 파일·QR 만들기'),
+      el('p', 'sub', '팀 대상목록 엑셀을 그 팀 비밀번호로 암호화해 목록 파일(.sajin) 또는 QR로 만듭니다. 팀 비밀번호를 아는 팀원이면 누구나 만들 수 있습니다. 엑셀과 비밀번호는 이 PC 밖으로 나가지 않으며 저장되지 않습니다 (화면을 닫으면 사라짐).'));
     v.appendChild(intro);
     if (!window.isSecureContext || !root.crypto || !root.crypto.subtle || !LC || !CFG || !LC.currentSalt(CFG)) {
       intro.appendChild(el('p', 'warnbox', '이 브라우저에서는 암호화를 할 수 없습니다. 이 파일을 Chrome 또는 Edge로 열어 주세요.'));
       return;
     }
-    let key = null, pass = '', parsed = null, prev = null;   // prev: {listId, team, rows, listVersion}
+    let key = null, pass = '', team = '', parsed = null, prev = null;   // prev: {listId, team, rows, listVersion}
+    // 이 PC에서 쓴 팀 이름 (비밀 아님, 고르기 편하게). 비밀번호는 저장하지 않는다
+    const teamsUsed = () => { try { return JSON.parse(store.get('sajin.teams') || '[]').filter(x => typeof x === 'string'); } catch (e) { return []; } };
 
-    // 1. 팀 비밀번호 (서버가 없어 맞는지 확인할 방법이 없으므로 두 번 입력)
-    const s1 = el('section', 'block adm'); s1.appendChild(el('h3', null, '1. 팀 비밀번호'));
-    s1.appendChild(el('p', 'sub', '실에서 정한 팀 비밀번호를 두 번 입력하세요. 저장되지 않습니다.'));
+    // 1. 팀: 먼저 팀을 정하고(새 팀이면 이름 입력), 그 팀 비밀번호를 넣어야 만들 수 있다 (팀마다 비밀번호가 다름)
+    const s1 = el('section', 'block adm'); s1.appendChild(el('h3', null, '1. 팀'));
+    s1.appendChild(el('p', 'sub', '목록을 만들 팀을 고르거나 새 팀 이름을 입력하세요.'));
+    const tl = el('label', 'f', '팀 이름'); const tn = el('input'); tn.type = 'text'; tn.id = 'admTeam'; tn.placeholder = '예) 1팀 (부산권)';
+    const dl = el('datalist'); dl.id = 'admTeams'; teamsUsed().forEach(t => { const o = el('option'); o.value = t; dl.appendChild(o); });
+    tn.setAttribute('list', 'admTeams'); tl.append(tn, dl);
+    const out0 = el('p', 'msg err'); out0.setAttribute('role', 'alert');
+    const ok0 = button('btn primary', '다음', pickTeam); ok0.id = 'admTeamOk';
+    const chg = button('btn', '팀 바꾸기', resetTeam); chg.id = 'admTeamChange'; chg.hidden = true;
+    tn.addEventListener('keydown', e => { if (e.key === 'Enter') pickTeam(); });
+    s1.append(tl, ok0, chg, out0);
+
+    // 2. 그 팀 비밀번호 (서버가 없어 맞는지 확인할 방법이 없으므로 두 번 입력)
+    const sp = el('section', 'block adm'); sp.hidden = true;
+    const spT = el('h3'); const spS = el('p', 'sub');
     const pw = el('input'); pw.type = 'password'; pw.id = 'admPass'; pw.autocomplete = 'off'; pw.setAttribute('aria-label', '팀 비밀번호');
     const pw2 = el('input'); pw2.type = 'password'; pw2.id = 'admPass2'; pw2.autocomplete = 'off'; pw2.placeholder = '한 번 더 입력'; pw2.setAttribute('aria-label', '팀 비밀번호 확인');
     const out1 = el('p', 'msg err'); out1.setAttribute('role', 'alert');
     const ok1 = button('btn primary', '확인', unlock); ok1.id = 'admPassOk';
     [pw, pw2].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); }));
-    s1.append(pw, pw2, ok1, out1);
+    sp.append(spT, spS, pw, pw2, ok1, out1);
 
-    // 2. 팀 이름 · 엑셀 · (갱신이면) 이전 목록 파일
-    const s2 = el('section', 'block adm'); s2.hidden = true; s2.appendChild(el('h3', null, '2. 팀 이름 · 엑셀'));
-    const tl = el('label', 'f', '팀 이름'); const tn = el('input'); tn.type = 'text'; tn.id = 'admTeam'; tn.placeholder = '예) 3팀 (부산권)'; tl.appendChild(tn);
+    // 3. 엑셀 · (갱신이면) 이전 목록 파일
+    const s2 = el('section', 'block adm'); s2.hidden = true; s2.appendChild(el('h3', null, '3. 엑셀'));
     const xi = el('input'); xi.type = 'file'; xi.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; xi.hidden = true;
     const pi = el('input'); pi.type = 'file'; pi.hidden = true;
     const pickXls = button('btn', '엑셀 선택 (.xlsx)', () => { xi.value = ''; xi.click(); }); pickXls.id = 'admXlsBtn';
@@ -66,10 +79,10 @@
       l.append(x, document.createTextNode(' ' + t)); opts.appendChild(l);
     });
     const warnT = el('p', 'warnbox', '출장자 이름을 빼면 휴대폰에서 이름으로 팀을 자동 구분할 수 없어, 실원이 팀을 직접 골라야 합니다.'); warnT.hidden = true;
-    s2.append(tl, pickXls, xi, prevBox, pickPrev, pi, prevInfo, diffBox, opts, warnT);
+    s2.append(pickXls, xi, prevBox, pickPrev, pi, prevInfo, diffBox, opts, warnT);
 
     // 3. 파일 만들기
-    const s3 = el('section', 'block adm'); s3.hidden = true; s3.appendChild(el('h3', null, '3. 목록 파일 또는 QR 만들기'));
+    const s3 = el('section', 'block adm'); s3.hidden = true; s3.appendChild(el('h3', null, '4. 목록 파일 또는 QR 만들기'));
     s3.appendChild(el('p', 'sub', '팀원이 PC 앞에 모여 있으면 「QR 만들기」(휴대폰 카메라로 찍기), 아니면 「목록 파일 만들기」(기관 메일 첨부).'));
     const out3 = el('p', 'msg'); out3.setAttribute('role', 'status');
     const mk = button('btn primary', '목록 파일 만들기', make); mk.id = 'admMake';
@@ -83,8 +96,25 @@
     const guide = el('section', 'block adm guide'); guide.hidden = true;
     const qv = el('section', 'block adm qrview'); qv.hidden = true; qv.id = 'admQrView';
     const ps = el('section', 'printsheet'); ps.hidden = true; ps.id = 'admPrint';
-    v.append(s1, s2, s3, guide, qv, ps);
+    v.append(s1, sp, s2, s3, guide, qv, ps);
 
+    function pickTeam() {
+      out0.textContent = '';
+      const t = tn.value.trim().slice(0, 60);
+      if (!t) { out0.textContent = '팀 이름을 입력하세요.'; tn.focus(); return; }
+      team = t; tn.value = t; tn.readOnly = true; ok0.hidden = true; chg.hidden = false;
+      spT.textContent = `2. ${t} 비밀번호`;
+      spS.textContent = teamsUsed().includes(t) ? `${t} 비밀번호를 두 번 입력하세요. 저장되지 않습니다.`
+        : `${t} 비밀번호를 두 번 입력하세요. 처음 만드는 팀이면 지금 정한 비밀번호가 이 팀 비밀번호가 됩니다 (팀마다 다르게, 12자 이상). 팀원에게 구두나 내부 메신저로만 알려 주세요. 저장되지 않습니다.`;
+      sp.hidden = false; pw.focus();
+    }
+    // 팀을 바꾸면 비밀번호·이전 목록·만든 QR 을 처음부터 다시
+    function resetTeam() {
+      key = null; pass = ''; team = ''; prev = null; prevInfo.innerHTML = ''; diffBox.innerHTML = '';
+      tn.readOnly = false; ok0.hidden = false; chg.hidden = true; sp.hidden = true; s2.hidden = true; s3.hidden = true;
+      guide.hidden = true; qv.hidden = true; ps.hidden = true; qv.innerHTML = ''; ps.innerHTML = ''; qr = null;
+      out1.textContent = ''; out3.textContent = ''; pw.value = ''; pw2.value = ''; tn.focus();
+    }
     async function unlock() {
       out1.className = 'msg err'; out1.textContent = '';
       try { LC.checkPass(pw.value); } catch (e) { out1.textContent = e.message; return; }
@@ -93,8 +123,9 @@
       try {
         pass = pw.value; key = await LC.deriveKey(pass, LC.currentSalt(CFG).salt, CFG.iter);
         pw.value = ''; pw2.value = '';
-        out1.className = 'msg'; out1.textContent = '확인했습니다. 팀 이름과 엑셀을 고르세요.';
-        s2.hidden = false; s3.hidden = false; tn.focus();
+        store.set('sajin.teams', JSON.stringify([team].concat(teamsUsed().filter(x => x !== team)).slice(0, 20)));
+        out1.className = 'msg'; out1.textContent = `확인했습니다. ${team} 엑셀을 고르세요.`;
+        s2.hidden = false; s3.hidden = false; pickXls.focus();
       } catch (e) { out1.textContent = e.message || '확인하지 못했습니다.'; }
       finally { ok1.disabled = false; ok1.textContent = '확인'; }
     }
@@ -122,9 +153,8 @@
         const s = LC.saltById(CFG, o.kdf.saltId);
         if (!s) throw new Error('이 파일은 더 새로운 관리 파일로 만들어졌습니다. 최신 admin.html 을 받아 주세요.');
         let c;
-        try { c = await LC.decryptList(await LC.deriveKey(pass, s.salt, CFG.iter), o); } catch (e) { throw new Error('이전 목록 파일이 지금 비밀번호로 열리지 않습니다.'); }
+        try { c = await LC.decryptList(await LC.deriveKey(pass, s.salt, CFG.iter), o); } catch (e) { throw new Error(`이전 목록 파일이 ${team} 비밀번호로 열리지 않습니다. 다른 팀 목록 파일인지 확인하세요.`); }
         prev = { listId: c.listId, team: c.team.name, rows: I.cleanRows(c.sites), listVersion: c.listVersion };
-        if (!tn.value) tn.value = c.team.name;
         prevInfo.appendChild(el('p', 'sub', `이전 목록: ${c.team.name} · ${c.batch.name} · ${c.sites.length}곳 → 같은 목록으로 이어서 만듭니다 (휴대폰에서 「갱신」)`));
         showDiff();
       } catch (e) { prevInfo.appendChild(el('p', 'msg err', e.message)); }
@@ -141,8 +171,7 @@
       out3.className = 'msg err';
       if (!key) { out3.textContent = '먼저 비밀번호를 확인하세요.'; return; }
       if (!parsed) { out3.textContent = '엑셀을 선택하세요.'; return; }
-      const teamName = tn.value.trim();
-      if (!teamName) { out3.textContent = '팀 이름을 입력하세요.'; tn.focus(); return; }
+      const teamName = team;
       try {
         const content = LC.makeContent({ listId: prev && prev.listId, teamName, name: parsed.name, rows: parsed.rows,
           withContact: opt.withContact, withTravelers: opt.withTravelers ? true : false });
@@ -166,8 +195,7 @@
       out3.className = 'msg err';
       if (!key) { out3.textContent = '먼저 비밀번호를 확인하세요.'; return; }
       if (!parsed) { out3.textContent = '엑셀을 선택하세요.'; return; }
-      const teamName = tn.value.trim();
-      if (!teamName) { out3.textContent = '팀 이름을 입력하세요.'; tn.focus(); return; }
+      const teamName = team;
       const Q = root.SajinQR;
       try {
         const content = LC.makeContent({ listId: prev && prev.listId, teamName, name: parsed.name, rows: parsed.rows,
@@ -227,11 +255,11 @@
       ps.appendChild(tools);
       if (n > 4) { ps.appendChild(el('p', 'warnbox noprint', `QR이 ${n}장이라 A4 한 장에 다 넣을 수 없습니다. 「QR에서 연락처·담당자 빼기」에 체크하거나 메일 파일 방식을 쓰세요.`)); go.disabled = true; }
       const pg = el('div', 'ppage' + (small ? ' small' : '') + (n === 1 ? ' one' : ''));
-      if (!small) pg.appendChild(el('h2', null, '현장 사진대지 · 대상목록 QR'));
+      if (!small) pg.appendChild(el('h2', null, '사실관계조사 · 대상목록 QR'));
       pg.appendChild(el('p', 'pinfo', `${qr.team} · ${qr.batch} · ${qr.at} 만듦${n > 1 ? ` · QR ${n}장` : ''}`));
       const g = el('div', 'pgrid'); qr.urls.slice(0, 4).forEach((u, i) => g.appendChild(qrFig(i, 'pfig'))); pg.appendChild(g);
       const tips = ['휴대폰으로 앱을 열고 「QR 찍기」 → 이 QR을 비추세요 (기본 카메라 앱으로 찍어도 됩니다).',
-        n > 1 ? `QR ${n}장을 순서 상관없이 모두 찍으세요.` : '', '처음이면 팀 비밀번호(구두로 전달받은 것)와 내 이름을 입력합니다.',
+        n > 1 ? `QR ${n}장을 순서 상관없이 모두 찍으세요.` : '', '처음이면 우리 팀 비밀번호(구두로 전달받은 것)와 내 이름을 입력합니다.',
         'QR 안의 목록은 암호화되어 있습니다. 출장이 끝나면 일반 문서처럼 파기하세요.'].filter(Boolean);
       if (small) pg.appendChild(el('p', 'pguide', tips[0]));
       else { const ol = el('ol', 'pguide'); tips.forEach(t => ol.appendChild(el('li', null, t))); pg.appendChild(ol); }
@@ -241,7 +269,7 @@
     window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
     function showGuide(name) {
       guide.innerHTML = ''; guide.hidden = false;
-      guide.appendChild(el('h3', null, '4. 기관 메일로 보내기'));
+      guide.appendChild(el('h3', null, '5. 기관 메일로 보내기'));
       guide.appendChild(el('p', 'big', `기관 메일에 ${name} 파일을 첨부해 팀원에게 보내세요. 비밀번호는 메일에 적지 마세요.`));
       const ol = el('ol');
       ['기관 메일 새 메일 → 받는 사람: 팀원', `첨부: 방금 내려받은 ${name} (다운로드 폴더)`, '본문: 아래 「메일 본문 복사」 → 붙여 넣기', '팀 비밀번호는 구두나 내부 메신저로만 전달'].forEach(t => ol.appendChild(el('li', null, t)));

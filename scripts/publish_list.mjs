@@ -4,7 +4,7 @@
 //   --txt  : 기관 메일이 .sajin 첨부를 막으면 .txt 로 저장
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { I, X, LC, JSZip, fail, readPass, loadCfg, keyFor, inRepo, parseArgs } from './listlib.mjs';
+import { I, X, LC, JSZip, fail, readPass, passFileFor, loadCfg, keyFor, inRepo, parseArgs } from './listlib.mjs';
 
 const a = parseArgs(process.argv.slice(2));
 if (a.team || a.clear) fail('--team, --clear 는 더 이상 쓰지 않습니다 (서버 팀 칸 방식 폐지). --team-name 만 넣어 주세요.');
@@ -27,8 +27,8 @@ if (parsed.warnings.length) { console.log('확인이 필요한 칸:'); parsed.wa
 if (a['no-travelers']) console.log('주의: --no-travelers → 출장자 이름이 빠져 휴대폰에서 이름으로 팀을 자동 구분할 수 없습니다 (팀 선택 화면으로 고름).');
 if (a['no-contacts']) console.log('연락처·담당자는 넣지 않습니다.');
 
-// 2) 비밀번호·키 (지금 쓰는 솔트)
-const pass = readPass();
+// 2) 그 팀 비밀번호(list-passphrase-<팀>.txt)·키 (지금 쓰는 솔트)
+const pass = readPass(passFileFor(teamName));
 const cfg = loadCfg();
 const { key, saltId } = await keyFor(pass, cfg);
 
@@ -41,7 +41,7 @@ if (a.prev) {
   try { old = JSON.parse(readFileSync(pf, 'utf8').replace(/^﻿/, '')); } catch (e) { fail('이전 목록 파일이 손상되었습니다.'); }
   if (!LC.isEncFile(old)) fail('이전 목록 파일이 대상목록 파일(.sajin) 형식이 아닙니다.');
   let oc;
-  try { oc = await LC.decryptList((await keyFor(pass, cfg, old.kdf.saltId)).key, old); } catch (e) { fail('이전 목록 파일이 지금 비밀번호로 열리지 않습니다.'); }
+  try { oc = await LC.decryptList((await keyFor(pass, cfg, old.kdf.saltId)).key, old); } catch (e) { fail(`이전 목록 파일이 ${teamName} 비밀번호로 열리지 않습니다. 다른 팀 목록 파일인지 확인하세요.`); }
   listId = oc.listId;
   const d = I.diffRows(I.cleanRows(oc.sites), parsed.rows);
   console.log(`이전 목록(${oc.team.name}, ${oc.listVersion})을 이어받습니다 → 휴대폰에서 「갱신」으로 처리됩니다.`);

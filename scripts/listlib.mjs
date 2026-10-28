@@ -13,19 +13,21 @@ export const X = globalThis.SajinXlsx, I = globalThis.SajinImport, LC = globalTh
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // 테스트는 SAJIN_CRYPTO_FILE·SAJIN_PASSFILE 로 저장소 밖 임시 파일을 쓴다
 export const CFGFILE = resolve(process.env.SAJIN_CRYPTO_FILE || join(ROOT, 'data', 'crypto.json'));
-export const PASSFILE = resolve(process.env.SAJIN_PASSFILE || join(ROOT, 'list-passphrase.txt'));
+// 팀마다 비밀번호가 다르다: 팀 비밀번호 파일 = list-passphrase-<팀 이름(공백·특수문자 뺌)>.txt
+export const teamFileName = team => `list-passphrase-${String(team || '').replace(/[\\/:*?"<>|()\s]+/g, '') || '팀'}.txt`;
+export const passFileFor = team => resolve(process.env.SAJIN_PASSFILE || join(ROOT, teamFileName(team)));
 
 export function fail(msg) { console.error('\n중단: ' + msg); process.exit(1); }
 // 저장소 폴더 안쪽인지 (엑셀·목록 파일은 저장소 밖에만 둔다)
 export const inRepo = p => (resolve(p).toLowerCase() + sep).startsWith(resolve(ROOT).toLowerCase() + sep);
 
-const HOWTO = `비밀번호 파일이 없습니다.
+const howto = file => `팀 비밀번호 파일이 없습니다.
   1) 메모장을 엽니다
-  2) 팀 비밀번호만 한 줄 입력합니다 (12자 이상)
-  3) 「다른 이름으로 저장」 → 위치: sajin-app 폴더, 파일 이름: list-passphrase.txt
+  2) 이 팀 비밀번호만 한 줄 입력합니다 (12자 이상, 팀마다 다름)
+  3) 「다른 이름으로 저장」 → 위치: sajin-app 폴더, 파일 이름: ${file.split(/[\\/]/).pop()}
   (이 파일은 git에 올라가지 않으며, Claude Code에게 비밀번호를 말할 필요가 없습니다)`;
-export function readPass(file = PASSFILE) {
-  if (!existsSync(file)) fail(HOWTO);
+export function readPass(file) {
+  if (!existsSync(file)) fail(howto(file));
   const p = readFileSync(file, 'utf8').replace(/^﻿/, '').split(/\r?\n/)[0].trim();
   try { LC.checkPass(p) } catch (e) { fail(e.message + ` (${file})`); }
   return p;

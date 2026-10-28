@@ -18,7 +18,8 @@ OUT = ROOT / 'tests/out'
 UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1'
 URL = (ROOT / 'index.html').as_uri()
 REPORT = '261103_관리주체_합동점검_결과_보고서(마바아파트).hwpx'
-PASS = 'test-only-passphrase-0000'
+PASS = 'test-only-passphrase-0000'    # 1팀·3팀·4팀
+PASS2 = 'test-only-passphrase-2222'   # 2팀 (팀마다 비밀번호가 다름)
 REQUESTS = []   # 모든 페이지의 네트워크 요청 (data/lists 호출이 없어야 함)
 
 # 예전 버전(v2): 보고서 1건을 'draft'에, 사진을 'photos'에 넣는다
@@ -178,17 +179,22 @@ async def list_flow(b, fx):
     await A.screenshot(path=str(OUT / 'screen_password.png'))
     await A.fill('#passIn', 'wrong-passphrase-00000'); await A.click('.keycard button:has-text("확인")')
     await A.wait_for_function("document.querySelector('.keycard .msg').textContent.includes('맞지 않습니다')")
-    await A.fill('#passIn', PASS); await A.click('.keycard button:has-text("확인")')
+    await A.fill('#passIn', PASS); await A.click('.keycard button:has-text("확인")')   # 1팀 비밀번호로는 2팀 목록이 안 열림
+    await A.wait_for_function("document.querySelector('.keycard .msg').textContent.includes('맞지 않습니다')")
+    await A.fill('#passIn', PASS2); await A.click('.keycard button:has-text("확인")')
     m = await msg(A, '등록했습니다'); assert '2팀 (시험권) · 99년 9차 · 5곳을 등록했습니다' in m, m
     await A.wait_for_selector('#nameIn'); await A.fill('#nameIn', '이팀갑'); await A.click('.keycard button:has-text("확인")')
     await A.wait_for_selector('#siteList .site')
     assert await A.locator('#siteList .site').count() == 5, '2팀 5곳만'
     assert '2팀' in await A.text_content('#batchName')
     await A.screenshot(path=str(OUT / 'screen_imported.png'), full_page=True)
-    # 2) 1팀 .sajin → 비밀번호 다시 묻지 않음, 여전히 2팀만, 「다른 팀 보기」에 1팀
-    await load_file(A, fx / 'team1.sajin')
+    # 2) 1팀 .sajin → 1팀 비밀번호를 따로 물음 → 여전히 2팀만, 「다른 팀 보기」에 1팀
+    await load_file(A, fx / 'team1.sajin'); await A.wait_for_selector('#passIn')
+    assert '이 목록의 팀 비밀번호' in await A.text_content('.keycard')
+    await A.screenshot(path=str(OUT / 'screen_password_other.png'))
+    await A.fill('#passIn', PASS); await A.click('.keycard button:has-text("확인")')
     assert '다른 팀 보기' in await msg(A, '1팀 (시험권)')
-    assert await A.locator('#passIn').count() == 0, '키가 있으면 다시 묻지 않음'
+    assert await A.locator('#passIn').count() == 0
     assert await A.locator('#siteList .site').count() == 5
     await A.click('.others > summary')
     assert await A.locator('#otherTeams .site').count() == 7 and '1팀 (시험권)' in await A.text_content('#otherTeams')
@@ -198,7 +204,7 @@ async def list_flow(b, fx):
     async with A.expect_file_chooser() as fc: await A.locator('.add').first.click()
     await (await fc.value).set_files(str(ROOT / 'tests/fixtures/landscape.jpg'))
     await A.wait_for_selector('.ph'); await A.click('#backBtn'); await A.wait_for_selector('#siteList .site')
-    await load_file(A, fx / 'team2_v2.sajin')
+    await load_file(A, fx / 'team2_v2.sajin')   # 2팀 키가 이미 있으면 다시 묻지 않음
     m = await msg(A, '갱신했습니다'); assert '갱신 5곳, 추가 1곳' in m, m
     assert await A.locator('#siteList .site').count() == 6
     assert '사진 1장' in await A.locator('#siteList .site', has_text='마바아파트').locator('.state').text_content(), '갱신 후 사진 유지'
@@ -226,7 +232,8 @@ async def list_flow(b, fx):
     await B.goto(URL); await load_file(B, fx / 'team1.sajin'); await B.wait_for_selector('#passIn')
     await B.fill('#passIn', PASS); await B.click('.keycard button:has-text("확인")')
     await B.wait_for_selector('#nameIn'); await B.click('.keycard button:has-text("건너뛰기")')
-    await load_file(B, fx / 'team2.sajin'); await msg(B, '2팀')
+    await load_file(B, fx / 'team2.sajin'); await B.wait_for_selector('#passIn')
+    await B.fill('#passIn', PASS2); await B.click('.keycard button:has-text("확인")'); await msg(B, '2팀')
     await B.wait_for_selector('.pick'); assert await B.locator('.pick').count() == 2
     await B.screenshot(path=str(OUT / 'screen_team_pick.png'))
     await B.locator('.pick', has_text='1팀').locator('input').check()
@@ -241,7 +248,7 @@ async def list_flow(b, fx):
     await L.evaluate(SEED_V3_SLOT); await L.reload(); await L.wait_for_selector('.site')
     assert '이전 방식으로 받은 목록' in await L.text_content('.site'), '이전 방식 표시'
     await load_file(L, fx / 'team2.sajin'); await L.wait_for_selector('#passIn')
-    await L.fill('#passIn', PASS); await L.click('.keycard button:has-text("확인")')
+    await L.fill('#passIn', PASS2); await L.click('.keycard button:has-text("확인")')
     await msg(L, '등록했습니다')
     assert await L.locator('#nameIn').count() == 0, '이전에 입력한 이름 유지'
     await L.wait_for_selector('#siteList .site')
@@ -265,11 +272,14 @@ async def admin_flow(b, fx):
         if route.request.url.startswith('file:'): await route.continue_()
         else: external.append(route.request.url); await route.abort()
     await ctx.route('**/*', guard)
-    await pg.goto(admin.as_uri()); await pg.wait_for_selector('#admPass')
+    await pg.goto(admin.as_uri()); await pg.wait_for_selector('#admTeam')
+    assert '사실관계조사' in await pg.text_content('h1')
+    assert not await pg.is_visible('#admPass'), '팀을 정하기 전에는 비밀번호 칸 없음'
+    await pg.fill('#admTeam', '4팀 (시험권)'); await pg.click('#admTeamOk'); await pg.wait_for_selector('#admPass:visible')
+    assert '4팀 (시험권) 비밀번호' in await pg.text_content('#adminView')
     await pg.fill('#admPass', PASS); await pg.fill('#admPass2', 'different-passphrase-0')
-    await pg.click('#admPassOk'); await pg.wait_for_function("document.querySelector('#adminView .msg').textContent.includes('다릅니다')")
-    await pg.fill('#admPass2', PASS); await pg.click('#admPassOk'); await pg.wait_for_selector('#admTeam:visible')
-    await pg.fill('#admTeam', '4팀 (시험권)')
+    await pg.click('#admPassOk'); await pg.wait_for_function("document.body.textContent.includes('다릅니다')")
+    await pg.fill('#admPass2', PASS); await pg.click('#admPassOk'); await pg.wait_for_selector('#admXlsBtn:visible')
     async with pg.expect_file_chooser() as fc: await pg.click('#admXlsBtn')
     await (await fc.value).set_files(str(ROOT / 'tests/fixtures/sample_list.xlsx'))
     await pg.wait_for_selector('.admprev .plist')
@@ -319,7 +329,7 @@ async def admin_flow(b, fx):
     await P.fill('#passIn', PASS); await P.click('.keycard button:has-text("확인")')
     assert '4팀 (시험권) · 99년 9차 · 7곳을 등록했습니다' in await msg(P, '등록했습니다')
     # 앱의 #admin 도 같은 화면
-    await P.goto(URL + '#admin'); await P.wait_for_selector('#admPass')   # 앱이 #admin 으로 바뀌면 스스로 다시 열림
+    await P.goto(URL + '#admin'); await P.wait_for_selector('#admTeam')   # 앱이 #admin 으로 바뀌면 스스로 다시 열림
     assert '팀 칸' not in await P.text_content('#adminView'), '서버 팀 칸 문구가 남아 있음'
     await ctxP.close()
     print('관리 파일 통과: 오프라인(외부 요청 0건)으로 .sajin 생성, 메일 본문(비밀번호·시설 정보 없음), 이전 목록 비교, 휴대폰에서 열림')
@@ -397,6 +407,7 @@ async def qr_scan(p, fx):
                                       f'--use-file-for-fake-video-capture={fx / "qr_cam.y4m"}'])
     ctx, A = await new_page(b)
     await A.goto(URL); await A.wait_for_selector('.empty')
+    assert '사실관계조사' in await A.title() and '사실관계조사' in await A.text_content('h1')
     await A.click('#qrBtn'); await A.wait_for_selector('#dlg[open] video')
     await A.wait_for_selector('#passIn', timeout=20000)
     assert not await A.evaluate("document.querySelector('#dlg').open"), '다 받으면 카메라 창 닫힘'

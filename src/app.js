@@ -637,7 +637,7 @@ function renderList(){
     e.append(el('b', null, '등록된 대상 목록이 없습니다'),
       el('p', null, '팀장 PC 화면이나 인쇄물의 QR을 위의 「QR 찍기」로 찍거나, 기관 메일로 받은 첨부파일을 「목록 파일 불러오기」로 여세요.'));
     const ol = el('ol', 'steps');
-    ['사파리로 기관 웹메일에 들어가 첨부파일(대상목록_….sajin) 내려받기 (파일 앱 › 다운로드에 저장됨)', '이 화면의 「목록 파일 불러오기」 → 저장한 파일 선택', '처음 한 번만 팀 비밀번호와 내 이름 입력 → 우리 팀 목록'].forEach(t => ol.appendChild(el('li', null, t)));
+    ['사파리로 기관 웹메일에 들어가 첨부파일(대상목록_….sajin) 내려받기 (파일 앱 › 다운로드에 저장됨)', '이 화면의 「목록 파일 불러오기」 → 저장한 파일 선택', '처음 한 번만 우리 팀 비밀번호와 내 이름 입력 → 우리 팀 목록'].forEach(t => ol.appendChild(el('li', null, t)));
     e.append(ol, el('p', null, '목록 없이 쓰려면 「직접 입력해서 시작」을 누르세요.'));
     box.appendChild(e); return;
   }
@@ -754,28 +754,35 @@ async function openListFile(f){
   throw new Error('대상목록 파일이 아닙니다. 팀장에게 받은 메일의 첨부파일(.sajin)을 고르세요.');
 }
 
-// 팀 비밀번호 키: 비밀번호는 저장하지 않고, 솔트별로 꺼낼 수 없는 키(CryptoKey)만 IndexedDB 'listKeys'에 둔다
+// 팀 비밀번호 키: 비밀번호는 저장하지 않고, 꺼낼 수 없는 키(CryptoKey)만 IndexedDB 'listKeys'에 둔다
+// 팀마다 비밀번호가 다르므로 솔트별로 여러 개: {솔트 이름: [{key, addedAt}, …]} (열 때 차례로 맞춰 봄)
 let keys = null, keyState = '', pendingFile = null, fails = 0, lockUntil = 0;
 const saveKeys = () => tx('kv','readwrite', s => s.put(keys, 'listKeys'));
 async function loadKeys(){
   if (keys) return keys;
   try{ keys = (await getKV(await idb(), 'listKeys')) || {}; }catch(e){ keys = {}; }
+  Object.keys(keys).forEach(id => { if (!Array.isArray(keys[id])) keys[id] = keys[id] && keys[id].key ? [keys[id]] : []; });   // 예전(솔트당 1개) 형식
   // 새 솔트 키를 받은 지 2주가 지나면 이전 솔트 키는 지움
-  const cur = LC.currentSalt(CRYPTO);
-  if (cur && keys[cur.id] && Date.now() - keys[cur.id].addedAt > 14 * 864e5){
+  const cur = LC.currentSalt(CRYPTO), ck = cur && keys[cur.id];
+  if (ck && ck.length && Date.now() - Math.min(...ck.map(k => k.addedAt)) > 14 * 864e5){
     const old = Object.keys(keys).filter(id => id !== cur.id);
     if (old.length){ old.forEach(id => delete keys[id]); saveKeys(); }
   }
   return keys;
+}
+const keyCount = () => Object.values(keys || {}).reduce((a, l) => a + l.length, 0);
+async function findKey(file, saltId){
+  for (const k of (keys[saltId] || [])) if (await keyOk(k.key, file)) return k.key;
+  return null;
 }
 async function openSajin(file){
   if (!LC.isEncFile(file)) throw new Error('대상목록 파일이 손상되었습니다. 팀장에게 다시 받아 주세요.');
   const salt = LC.saltById(CRYPTO, file.kdf && file.kdf.saltId);
   if (!salt) throw new Error('이 목록 파일은 더 새로운 앱에서 만들어졌습니다. 앱을 새로고침해 최신 버전으로 바꾼 뒤 다시 불러오세요.');
   await loadKeys();
-  const k = keys[salt.id];
-  if (k && await LC.checkKey(k.key, file)) return applyListFile(k.key, file);
-  pendingFile = file; keyState = (k || Object.keys(keys).length) ? 'changed' : 'need';
+  const k = await findKey(file, salt.id);
+  if (k) return applyListFile(k, file);
+  pendingFile = file; keyState = keyCount() ? 'other' : 'need';
   renderList(); window.scrollTo(0, 0);
   const pi = $('#passIn'); if (pi) pi.focus();
 }
@@ -791,7 +798,7 @@ async function submitPass(pw, out, b){
       else out.textContent = file.qr ? QR_BAD : '비밀번호가 맞지 않습니다.';
       return;
     }
-    fails = 0; keys[salt.id] = {key, addedAt:Date.now()}; await saveKeys();
+    fails = 0; keys[salt.id] = (keys[salt.id] || []).concat([{key, addedAt:Date.now()}]).slice(-20); await saveKeys();
     pendingFile = null; keyState = '';
     await applyListFile(key, file);
   }catch(e){ out.textContent = e.message || '확인하지 못했습니다.'; }
@@ -826,10 +833,10 @@ async function applyListFile(key, file){
 }
 function card(title, sub){ const c = el('section', 'block keycard'); c.appendChild(el('b', null, title)); if (sub) c.appendChild(el('p', 'sub', sub)); return c; }
 function keyCard(){
-  const c = keyState === 'qrbad' ? card('팀 비밀번호를 다시 입력하세요', QR_BAD)
-    : keyState === 'changed'
-    ? card('팀 비밀번호가 바뀌었습니다', '새 팀 비밀번호를 입력하세요. 휴대폰의 사진·작성 내용은 그대로 있습니다.')
-    : card('팀 비밀번호를 입력하세요', '처음 한 번만 입력하면 됩니다. 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.');
+  const qrNote = pendingFile && pendingFile.qr ? ' QR이 손상되었을 수도 있으니, 맞는 비밀번호인데도 안 되면 QR을 다시 찍어 주세요.' : '';
+  const c = keyState === 'other'
+    ? card('이 목록의 팀 비밀번호를 입력하세요', '다른 팀 목록이거나 팀 비밀번호가 바뀌었습니다. 이 목록 팀의 비밀번호를 입력하세요 (팀마다 다릅니다). 휴대폰의 사진·작성 내용은 그대로 있습니다.' + qrNote)
+    : card('팀 비밀번호를 입력하세요', '우리 팀 비밀번호를 입력하세요 (팀마다 다릅니다). 처음 한 번만 입력하면 됩니다. 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.' + qrNote);
   const i = document.createElement('input'); i.type = 'password'; i.id = 'passIn'; i.autocomplete = 'current-password'; i.setAttribute('aria-label', '팀 비밀번호');
   const out = el('p', 'msg err'); out.setAttribute('role', 'alert');
   const b = btn('btn primary', '확인', () => submitPass(i.value, out, b));
@@ -944,7 +951,7 @@ const ODD_BROWSER = /SamsungBrowser|Whale|EdgA|EdgiOS|FxiOS|Firefox|OPR\/|OPT\//
 async function receiveQr(text, scanned){
   const p = QR.parsePart(text);
   if (!p){ if (!listShown) showList(); setMsg('이 앱용 QR이 아닙니다.', true); return null; }
-  if (!scanned && !qrHere && ODD_BROWSER && !app.sites.length && !Object.keys(await loadKeys()).length){
+  if (!scanned && !qrHere && ODD_BROWSER && !app.sites.length && (await loadKeys(), !keyCount())){
     qrHold = p; if (!listShown) showList(); renderList(); window.scrollTo(0, 0); return null;
   }
   const b = qrBundles[p.bid] || (qrBundles[p.bid] = {n:p.n, parts:{}, at:Date.now()});
@@ -959,9 +966,9 @@ async function openQR(payload){
   const salt = LC.saltById(CRYPTO, payload.saltId);
   if (!salt) throw new Error('이 QR은 더 새로운 앱에서 만들어졌습니다. 앱을 새로고침해 최신 버전으로 바꾼 뒤 다시 찍어 주세요.');
   await loadKeys();
-  const file = {qr:payload, kdf:{saltId:salt.id}}, k = keys[salt.id];
-  if (k && await QR.check(k.key, payload)) return applyListFile(k.key, file);
-  pendingFile = file; keyState = k ? 'qrbad' : Object.keys(keys).length ? 'changed' : 'need';
+  const file = {qr:payload, kdf:{saltId:salt.id}}, k = await findKey(file, salt.id);
+  if (k) return applyListFile(k, file);
+  pendingFile = file; keyState = keyCount() ? 'other' : 'need';
   renderList(); window.scrollTo(0, 0);
   const pi = $('#passIn'); if (pi) pi.focus();
 }

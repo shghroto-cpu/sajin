@@ -2,7 +2,7 @@
   "name": "sajin-app",
   "version": "1.0.0",
   "private": true,
-  "description": "국토안전관리원 관리주체 합동점검 현장 사진대지 웹앱 (휴대폰용, 한글 HWPX 보고서 생성)",
+  "description": "국토안전관리원 관리주체 합동점검(사실관계조사) 사진 보고서 웹앱 (휴대폰용, 한글 HWPX 보고서 생성)",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
