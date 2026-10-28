@@ -4,3 +4,10 @@ tests/out/
 template/source/*.hwpx
 template/source/*.hwp
 .DS_Store
+
+# 실제 대상목록·보고서는 절대 올리지 않음 (공개 저장소)
+*.xlsx
+*.xls
+*.hwpx
+*.hwp
+!tests/fixtures/sample_list*.xlsx

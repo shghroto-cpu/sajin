@@ -33,3 +33,16 @@ const buf = await buildHwpx(state, photoMap, JSZip, T, B, 'nodebuffer');
 mkdirSync(new URL('./out/', import.meta.url), { recursive: true });
 writeFileSync(new URL('./out/sample.hwpx', import.meta.url), buf);
 console.log(`sample.hwpx 생성 (${(buf.length / 1048576).toFixed(2)} MB)`);
+
+// 엑셀(가짜 대상목록)에서 불러온 3번 시설물로 보고서 1건 생성 → tests/out/site.hwpx
+require('../src/xlsxreader.js'); require('../src/importer.js');
+const I = globalThis.SajinImport;
+const { sheets } = await globalThis.SajinXlsx.readXlsx(img('sample_list.xlsx'), JSZip);
+const row = I.parseWorkbook(sheets).rows[2];
+const site = I.applyRow({ edited: [], meta: Object.assign({}, state.meta, { floors: '', area: '', height: '' }), sections: state.sections }, row, { kindMode: 'excel' });
+const buf2 = await buildHwpx({ meta: site.meta, sections: site.sections, attach1: true }, photoMap, JSZip, T, B, 'nodebuffer');
+writeFileSync(new URL('./out/site.hwpx', import.meta.url), buf2);
+const sec = await (await JSZip.loadAsync(buf2)).file('Contents/section0.xml').async('string');
+for (const t of [row.facility, row.owner, '2026. 11. 3.', 'D ', '(정밀진단)', '총 3명'])
+  if (!sec.includes(t)) { console.error(`site.hwpx 본문에 「${t}」 없음`); process.exit(1); }
+console.log(`site.hwpx 생성 (엑셀 불러온 시설물: ${row.facility})`);

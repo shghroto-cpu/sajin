@@ -7,27 +7,34 @@ const PARTS = ['슬래브','보','기둥','벽체','담장','관람석','계단'
 const DAMAGE = ['균열','철근노출','박리·박락','누수·백태','기울음','파손','부식','체결불량','처짐'];
 const LABELS = ['정밀안전점검 보고서 발췌','정밀안전점검 시의 외관조사 사진'];
 
-const defaultState = () => ({
-  v:2, crop:true, attach1:true, withPhotos:true,
-  meta:{
-    date:`${today.getFullYear()}. ${String(today.getMonth()+1).padStart(2,'0')}.`,
-    purpose:'정밀안전점검·진단의 사실관계확인 및 시설물 유지관리요령 전파',
-    period:`${today.getFullYear()}. ${today.getMonth()+1}. ${today.getDate()}.`,
-    inspectors:'', facility:'', owner:'', location:'',
-    kind:'', grade:'', completed:'', floors:'', area:'', height:'', safety:'',
-    resultHeading:'합동점검 결과', defaultLabel:'합동점검 사진'
-  },
-  sections:[
-    {id:uid(), title:'외관조사의 적정성', item:'외관조사 적정성 확인', opinion:'', photos:[]},
-    {id:uid(), title:'비파괴조사 적정성', item:'비파괴조사 적정성 확인', opinion:'', photos:[]},
-    {id:uid(), title:'유지관리 방안의 적정성', item:'유지관리 방안의 적정성 확인', opinion:'', photos:[]},
-    {id:uid(), title:'시설물 안전 및 유지관리에 관한 특이사항', item:'기타 시설물 안전 및 유지관리에 관한 특이사항 확인', opinion:'', photos:[]},
-    {id:uid(), type:'proposal', title:'보수・보강 및 유지관리 제안', opinion:'외관조사망도에 제시된 손상을 참고하여 지속적인 관리가 필요함', photos:[]}
-  ]
+const IMP = window.SajinImport;
+const defaultMeta = () => ({
+  date:`${today.getFullYear()}. ${String(today.getMonth()+1).padStart(2,'0')}.`,
+  purpose:'정밀안전점검·진단의 사실관계확인 및 시설물 유지관리요령 전파',
+  period:`${today.getFullYear()}. ${today.getMonth()+1}. ${today.getDate()}.`,
+  inspectors:'', facility:'', owner:'', location:'',
+  kind:'', grade:'', completed:'', floors:'', area:'', height:'', safety:'',
+  resultHeading:'합동점검 결과', defaultLabel:'합동점검 사진'
 });
+const defaultSections = () => [
+  {id:uid(), title:'외관조사의 적정성', item:'외관조사 적정성 확인', opinion:'', photos:[]},
+  {id:uid(), title:'비파괴조사 적정성', item:'비파괴조사 적정성 확인', opinion:'', photos:[]},
+  {id:uid(), title:'유지관리 방안의 적정성', item:'유지관리 방안의 적정성 확인', opinion:'', photos:[]},
+  {id:uid(), title:'시설물 안전 및 유지관리에 관한 특이사항', item:'기타 시설물 안전 및 유지관리에 관한 특이사항 확인', opinion:'', photos:[]},
+  {id:uid(), type:'proposal', title:'보수・보강 및 유지관리 제안', opinion:'외관조사망도에 제시된 손상을 참고하여 지속적인 관리가 필요함', photos:[]}
+];
+const defaultApp = () => ({v:3, batch:null, activeId:null, settings:{kindMode:'excel', crop:true, withPhotos:true, attach1:true}, sites:[]});
+// 시설물 1건 = 보고서 1건. row: 엑셀 대상목록의 행 (직접 입력이면 없음)
+function newSite(row){
+  const s = {id:'site_' + uid(), no:0, buildings:'', phone:'', contact:'', travelers:[], dateLabel:'', dateKey:'',
+    savedAt:null, edited:[], managers:0, src:null, meta:defaultMeta(), sections:defaultSections()};
+  if (row) IMP.applyRow(s, row, app.settings);
+  return s;
+}
 
-let state = defaultState();
-const blobs = new Map();   // photoId -> Blob
+let app = defaultApp();    // 저장되는 전체 자료 (v3)
+let state = null;          // 지금 열려 있는 시설물 (meta·sections)
+const blobs = new Map();   // photoId -> Blob (열린 시설물의 사진만)
 const urls = new Map();    // photoId -> objectURL
 
 /* ---------- IndexedDB ---------- */
@@ -53,7 +60,9 @@ async function tx(store, mode, fn){
   }catch(e){ return undefined; }
 }
 let saveTimer = null;
-function persist(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => tx('kv','readwrite', s => s.put(JSON.stringify(state),'draft')), 400); }
+function persist(){ clearTimeout(saveTimer); saveTimer = setTimeout(persistNow, 400); }
+function persistNow(){ clearTimeout(saveTimer); saveTimer = null; return tx('kv','readwrite', s => s.put(JSON.stringify(app),'appState')); }
+window.addEventListener('pagehide', () => { if (saveTimer) persistNow(); });
 // iOS(사파리·인앱브라우저)에서 저장된 Blob이 깨지는 문제 방지: 사진을 바이트(ArrayBuffer)로 저장
 const putPhoto = async (id, blob) => { let buf; try{ buf = await blob.arrayBuffer(); }catch(e){ return; } return tx('photos','readwrite', s => s.put({buf, type:'image/jpeg'}, id)); };
 async function toFreshBlob(v){
@@ -64,31 +73,75 @@ async function toFreshBlob(v){
     return new Blob([buf], {type:'image/jpeg'});
   }catch(e){ return null; }
 }
-let lostOnLoad = 0;
 const delPhoto = id => tx('photos','readwrite', s => s.delete(id));
+const getKV = (db, key) => new Promise(res => { const r = db.transaction('kv').objectStore('kv').get(key); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
 
 async function load(){
   try{
     const db = await idb();
-    const raw = await new Promise(res => { const r = db.transaction('kv').objectStore('kv').get('draft'); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
+    const raw = await getKV(db, 'appState');
     if (raw){
       const st = JSON.parse(raw);
+      if (st && Array.isArray(st.sites)) app = Object.assign(defaultApp(), st, {settings:Object.assign(defaultApp().settings, st.settings)});
+    } else {
+      // 예전 버전(보고서 1건, 'draft') 자료를 시설물 1건으로 옮김. 옮긴 결과가 저장된 뒤에만 예전 자료를 지움
+      const old = await getKV(db, 'draft');
+      const st = old && JSON.parse(old);
       if (st && st.sections){
-        state = st;
-        const ids = st.sections.flatMap(s => s.photos.map(p => p.id));
-        await Promise.all(ids.map(id => new Promise(res => {
-          const r = db.transaction('photos').objectStore('photos').get(id);
-          r.onsuccess = async () => { const b = await toFreshBlob(r.result); if (b){ blobs.set(id, b); urls.set(id, URL.createObjectURL(b)); if (!r.result.buf) putPhoto(id, b); } else { lostOnLoad++; delPhoto(id); } res(); };
-          r.onerror = () => res();
-        })));
-        state.sections.forEach(s => s.photos = s.photos.filter(p => blobs.has(p.id)));
-        persist();
+        const s = newSite(null);
+        s.no = 1; s.meta = Object.assign(defaultMeta(), st.meta); s.sections = st.sections;
+        app.settings.crop = st.crop !== false; app.settings.attach1 = st.attach1 !== false; app.settings.withPhotos = st.withPhotos !== false;
+        app.sites = [s]; app.activeId = s.id;
+        if (await persistNow() === 'appState') await tx('kv','readwrite', x => x.delete('draft'));
       }
     }
   }catch(e){}
-  render();
-  if (lostOnLoad) setMsg(`이전에 넣은 사진 ${lostOnLoad}장을 불러오지 못해 목록에서 뺐습니다. 해당 사진만 다시 추가해 주세요.`, true);
+  const open = app.sites.find(s => s.id === app.activeId);
+  if (open) await openSite(open.id); else showList();
+  checkHash();
 }
+// 시설물 사진 불러오기 (열 때만 읽어 메모리를 아낌)
+async function loadPhotos(site){
+  let lost = 0, db;
+  try{ db = await idb(); }catch(e){ return 0; }
+  const ids = site.sections.flatMap(s => s.photos.map(p => p.id));
+  const found = new Set();
+  await Promise.all(ids.map(id => new Promise(res => {
+    try{
+      const r = db.transaction('photos').objectStore('photos').get(id);
+      r.onsuccess = async () => { const b = await toFreshBlob(r.result); if (b){ found.add(id); blobs.set(id, b); urls.set(id, URL.createObjectURL(b)); if (!r.result.buf) putPhoto(id, b); } else { lost++; delPhoto(id); } res(); };
+      r.onerror = () => { found.add(id); res(); };   // 읽기 오류는 사진을 빼지 않음
+    }catch(e){ found.add(id); res(); }
+  })));
+  if (lost){ site.sections.forEach(s => s.photos = s.photos.filter(p => found.has(p.id))); persist(); }
+  return lost;
+}
+function freePhotos(){ urls.forEach(u => URL.revokeObjectURL(u)); urls.clear(); blobs.clear(); }
+const photoCount = site => site.sections.reduce((a, s) => a + s.photos.length, 0);
+
+/* ---------- 화면 전환: 대상 목록 ↔ 작성 화면 ---------- */
+let listShown = false;
+function showView(list){
+  listShown = list;
+  $('#listView').hidden = !list; $('#editView').hidden = list; $('#bar').hidden = list;
+  $('#backBtn').hidden = list; $('#resetBtn').hidden = list;
+  window.scrollTo(0, 0);
+}
+async function openSite(id){
+  const site = app.sites.find(s => s.id === id); if (!site) return;
+  freePhotos();
+  state = site; app.activeId = id; editVer++; prepared = null;
+  const lost = await loadPhotos(site);
+  persist(); showView(false); render();
+  $('#metaBox').open = !site.src && !site.meta.facility;
+  setMsg(lost ? `이전에 넣은 사진 ${lost}장을 불러오지 못해 목록에서 뺐습니다. 해당 사진만 다시 추가해 주세요.` : '', !!lost);
+}
+function showList(){
+  if (dlg.open) dlg.close();
+  freePhotos(); state = null; app.activeId = null; persist();
+  showView(true); renderList();
+}
+$('#backBtn').addEventListener('click', showList);
 
 /* ---------- 이미지 처리 ---------- */
 async function processImage(file){
@@ -99,7 +152,7 @@ async function processImage(file){
     w = src.naturalWidth; h = src.naturalHeight;
   }
   let sx = 0, sy = 0, sw = w, sh = h;
-  if (state.crop){
+  if (app.settings.crop){
     const landscape = w >= h;
     const target = landscape ? 4/3 : 3/4;
     if (w / h > target){ sw = Math.round(h * target); sx = Math.round((w - sw)/2); }
@@ -125,28 +178,61 @@ const META_FIELDS = [
 ];
 function renderMeta(){
   const f = $('#metaForm'); f.innerHTML = '';
+  const inputs = {};
+  if (state.src){
+    const p = document.createElement('p'); p.className = 'sub full';
+    p.textContent = '엑셀 대상목록에서 채운 값입니다. 직접 고친 칸은 엑셀을 다시 불러와도 바뀌지 않습니다. 층수·연면적·최고높이는 현장에서 입력하세요.';
+    f.appendChild(p);
+  }
   META_FIELDS.forEach(([k, label, full]) => {
     const l = document.createElement('label'); l.className = 'f' + (full ? ' full' : '');
     l.textContent = label;
-    const i = document.createElement('input'); i.type = 'text'; i.value = state.meta[k] || '';
-    i.addEventListener('input', () => { state.meta[k] = i.value; if (k === 'facility' || k === 'defaultLabel') { updateHeader(); if (k==='defaultLabel') renderSections(); } persist(); });
+    const i = document.createElement('input'); i.type = 'text'; i.value = state.meta[k] || ''; inputs[k] = i;
+    i.addEventListener('input', () => {
+      state.meta[k] = i.value; if (!state.edited.includes(k)) state.edited.push(k);
+      if (k === 'facility' || k === 'defaultLabel') { updateHeader(); if (k==='defaultLabel') renderSections(); } persist();
+    });
     l.appendChild(i); f.appendChild(l);
+    if (k === 'inspectors' && state.src){
+      // 현장에서 시설관리자 인원만 넣으면 점검자 문구를 자동으로 완성
+      const ml = document.createElement('label'); ml.className = 'f full'; ml.textContent = '시설관리자 인원 (넣으면 점검자 문구 자동 완성)';
+      const mi = document.createElement('input'); mi.type = 'number'; mi.inputMode = 'numeric'; mi.min = '0'; mi.max = '99'; mi.value = state.managers || '';
+      mi.addEventListener('input', () => {
+        state.managers = Math.max(0, parseInt(mi.value, 10) || 0);
+        const n = state.travelers.length || +state.src.travelerCount || 0;
+        state.meta.inspectors = IMP.inspectorsText(n, state.managers); inputs.inspectors.value = state.meta.inspectors;
+        state.edited = state.edited.filter(x => x !== 'inspectors'); persist();
+      });
+      ml.appendChild(mi); f.appendChild(ml);
+    }
   });
   const c = document.createElement('label'); c.className = 'check full';
   c.innerHTML = '<input type="checkbox"> 사진을 4:3 비율로 맞춰 자르기 (보고서 칸 크기 통일)';
-  const cb = c.querySelector('input'); cb.checked = !!state.crop;
-  cb.addEventListener('change', () => { state.crop = cb.checked; persist(); });
+  const cb = c.querySelector('input'); cb.checked = !!app.settings.crop;
+  cb.addEventListener('change', () => { app.settings.crop = cb.checked; persist(); });
   f.appendChild(c);
   [['attach1','제안에 「시설물안전법 실시시기(붙임1)」 문구 넣기'],['withPhotos','보고서와 함께 사진 원본 파일도 보내기']].forEach(([k,t]) => {
     const l = document.createElement('label'); l.className = 'check full';
     l.innerHTML = '<input type="checkbox"> '; l.appendChild(document.createTextNode(t));
-    const x = l.querySelector('input'); x.checked = state[k] !== false;
-    x.addEventListener('change', () => { state[k] = x.checked; persist(); });
+    const x = l.querySelector('input'); x.checked = app.settings[k] !== false;
+    x.addEventListener('change', () => { app.settings[k] = x.checked; persist(); });
     f.appendChild(l);
   });
+  if (state.src){
+    // 종류 칸: 엑셀의 시설물종류(기본) 또는 원본 양식처럼 「건축물」 고정 — 모든 시설물에 적용
+    const l = document.createElement('label'); l.className = 'check full';
+    l.innerHTML = '<input type="checkbox"> '; l.appendChild(document.createTextNode('종류 칸을 원본 양식처럼 「건축물」로 고정 (끄면 엑셀의 시설물종류)'));
+    const x = l.querySelector('input'); x.checked = app.settings.kindMode === 'fixed';
+    x.addEventListener('change', () => {
+      app.settings.kindMode = x.checked ? 'fixed' : 'excel';
+      app.sites.forEach(s => { if (s.src && !s.edited.includes('kind')) s.meta.kind = IMP.metaFromRow(s.src, app.settings).kind; });
+      inputs.kind.value = state.meta.kind || ''; persist();
+    });
+    f.appendChild(l);
+  }
 }
 function updateHeader(){
-  $('#hdrSub').textContent = state.meta.facility ? state.meta.facility : '새 보고서';
+  $('#hdrSub').textContent = state.meta.facility ? (state.no ? state.no + '. ' : '') + state.meta.facility : '새 보고서';
   const n = state.sections.reduce((a, s) => a + s.photos.length, 0);
   $('#cnt').textContent = n + '장';
 }
@@ -325,16 +411,18 @@ function openSheet(secId, pid){
 }
 
 /* ---------- 저장·공유 ---------- */
-function setMsg(t, err){ const m = $('#msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+function setMsg(t, err){ const m = $(listShown ? '#lmsg' : '#msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+function setMsgAll(t, err){ ['#msg','#lmsg'].forEach(k => { const m = $(k); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }); }
 const TPL = JSON.parse(document.getElementById('hwpxTpl').textContent);
 const BASE = document.getElementById('hwpxBase').textContent.trim();
 let downloads = null;
 (async () => {
   try{ if (window.claude && window.claude.use) downloads = await window.claude.use('downloads'); }catch(e){ downloads = null; }
-  if (!downloads && window.claude) setMsg('현재 화면(로그인 안 됨 또는 다른 앱 안의 브라우저)에서는 저장·메일 보내기가 막힐 수 있습니다. Claude 앱에 로그인한 뒤 이 링크를 열어 주세요.', true);
+  if (!downloads && window.claude) setMsgAll('현재 화면(로그인 안 됨 또는 다른 앱 안의 브라우저)에서는 저장·메일 보내기가 막힐 수 있습니다. Claude 앱에 로그인한 뒤 이 링크를 열어 주세요.', true);
 })();
 const clean = t => String(t || '').replace(/[\\/:*?"<>|\n\r]/g,'').trim();
-function yymmdd(){ const d = new Date(); return String(d.getFullYear()).slice(2) + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0'); }
+// 파일명 날짜: 엑셀의 점검 날짜, 없으면 오늘
+function yymmdd(){ if (state.dateKey) return state.dateKey.slice(2).replace(/-/g,''); const d = new Date(); return String(d.getFullYear()).slice(2) + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0'); }
 function baseName(){ return `${yymmdd()}_관리주체_합동점검_결과_보고서(${clean(state.meta.facility) || '시설물명'})`; }
 async function checkPhotos(){
   let lost = 0;
@@ -353,7 +441,7 @@ async function buildReport(){
   if (lost) setMsg(`읽을 수 없는 사진 ${lost}장은 빼고 만들었습니다. 필요하면 다시 추가해 주세요.`, true);
   const photoMap = {};
   state.sections.forEach(s => s.photos.forEach(p => { const bl = blobs.get(p.id); if (bl) photoMap[p.id] = {bytes:bl, w:p.w, h:p.h}; }));
-  const blob = await SajinHwpx.buildHwpx(state, photoMap, JSZip, TPL, BASE, 'blob');
+  const blob = await SajinHwpx.buildHwpx({meta:state.meta, sections:state.sections, attach1:app.settings.attach1}, photoMap, JSZip, TPL, BASE, 'blob');
   return new File([blob], baseName() + '.hwpx', {type:'application/hwp+zip'});
 }
 function photoFiles(){
@@ -384,7 +472,7 @@ $('#saveBtn').addEventListener('click', () => busy($('#saveBtn'), '파일 만드
   try{
     if (!window.JSZip) throw {message:'문서 생성 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.'};
     const report = await buildReport();
-    const photos = state.withPhotos !== false ? photoFiles() : [];
+    const photos = app.settings.withPhotos !== false ? photoFiles() : [];
     if (downloads){
       // Claude 화면에서는 .hwpx를 바로 저장할 수 없어 압축파일(.zip)로 저장
       const z = new JSZip(); z.file(report.name, report);
@@ -392,10 +480,11 @@ $('#saveBtn').addEventListener('click', () => busy($('#saveBtn'), '파일 만드
       const zb = await z.generateAsync({type:'blob', compression:'STORE'});
       const name = baseName() + '.zip';
       await downloads.save({filename:name, data:zb});
+      markSaved();
       setMsg(`저장했습니다: ${name}. 압축을 풀면 한글 파일(.hwpx)${photos.length ? '과 사진 폴더' : ''}가 들어 있습니다.`);
     } else {
       const bundle = await makeBundle(report, photos);
-      plainDownload(bundle);
+      plainDownload(bundle); markSaved();
       setMsg(photos.length
         ? `내려받았습니다: ${bundle.name} → ${WHERE}. 한글 보고서와 사진 폴더가 함께 들어 있고, 이 압축파일을 그대로 메일에 첨부하면 됩니다.`
         : `내려받았습니다: ${bundle.name} → ${WHERE}에 있습니다.`);
@@ -415,7 +504,7 @@ document.getElementById('metaForm').addEventListener('input', () => { editVer++;
 const WHERE = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? '‘파일’ 앱 › 다운로드 폴더' : '‘내 파일’ › 다운로드 폴더';
 async function prepareFiles(){
   const report = await buildReport();
-  return [report, ...(state.withPhotos !== false ? photoFiles() : [])];
+  return [report, ...(app.settings.withPhotos !== false ? photoFiles() : [])];
 }
 async function shareNow(files){
   const data = {files};
@@ -429,7 +518,7 @@ $('#mailBtn').addEventListener('click', async () => {
     if (!window.JSZip) throw {message:'문서 생성 도구를 불러오지 못했습니다. 새로고침하세요.'};
     // 이미 만들어 둔 파일이 있으면 바로 공유창 열기 (터치 직후라 막히지 않음)
     if (prepared && prepared.ver === editVer){
-      await shareNow(prepared.files);
+      await shareNow(prepared.files); markSaved();
       setMsg('메일 앱을 고르면 보고서와 사진이 첨부됩니다.');
       return;
     }
@@ -437,7 +526,7 @@ $('#mailBtn').addEventListener('click', async () => {
     prepared = {ver: editVer, files: await prepareFiles()};
     btn.disabled = false; btn.textContent = '메일로 보내기';
     try{
-      await shareNow(prepared.files);
+      await shareNow(prepared.files); markSaved();
       setMsg('메일 앱을 고르면 보고서와 사진이 첨부됩니다.');
     }catch(e){
       if (e && e.name === 'NotAllowedError' && navigator.share && !window.claude){
@@ -457,7 +546,7 @@ $('#mailBtn').addEventListener('click', async () => {
       else {
         // 공유창을 지원하지 않는 브라우저: 파일을 내려받고 위치 안내
         const files = (prepared && prepared.files) || await prepareFiles();
-        plainDownload(await makeBundle(files[0], files.slice(1)));
+        plainDownload(await makeBundle(files[0], files.slice(1))); markSaved();
         setMsg(`이 브라우저는 공유창을 지원하지 않아 파일을 내려받았습니다. ${WHERE}에서 확인 후 메일에 첨부하세요. 사파리·크롬으로 열면 바로 메일 보내기가 됩니다.`, true);
       }
       return;
@@ -467,15 +556,234 @@ $('#mailBtn').addEventListener('click', async () => {
 });
 // 네이버·카카오톡 등 앱 안의 브라우저 안내
 if (/NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp/i.test(navigator.userAgent)){
-  setMsg('지금은 다른 앱 안의 브라우저입니다. 메뉴(⋯)에서 ‘다른 브라우저로 열기’(사파리·크롬)를 누르면 메일 보내기가 됩니다.', true);
+  setMsgAll('지금은 다른 앱 안의 브라우저입니다. 메뉴(⋯)에서 ‘다른 브라우저로 열기’(사파리·크롬)를 누르면 메일 보내기가 됩니다.', true);
 }
 
+function markSaved(){ if (state){ state.savedAt = new Date().toISOString(); persist(); } }
+
+// 이 시설물 보고서만 비우기 (목록의 다른 시설물은 그대로, 엑셀에서 온 기본정보는 다시 채움)
 $('#resetBtn').addEventListener('click', async () => {
-  if (!confirm('입력 내용과 사진을 모두 지우고 새 보고서를 시작할까요?')) return;
+  if (!confirm('이 시설물의 사진·의견·직접 고친 기본정보를 모두 지울까요?\n(목록의 다른 시설물은 그대로 남습니다)')) return;
   state.sections.forEach(s => s.photos.forEach(p => dropPhoto(p.id)));
-  await tx('photos','readwrite', s => s.clear());
-  state = defaultState(); persist(); render(); setMsg('새 보고서를 시작했습니다.');
+  Object.assign(state, {meta:defaultMeta(), sections:defaultSections(), edited:[], managers:0, savedAt:null});
+  if (state.src) IMP.applyRow(state, state.src, app.settings);
+  editVer++; persist(); render(); setMsg('이 시설물 보고서를 비웠습니다.');
   $('#metaBox').open = true;
+});
+
+/* ---------- 대상 목록 화면 ---------- */
+const localKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+function renderList(){
+  const n = app.sites.length;
+  $('#hdrSub').textContent = app.batch ? app.batch.name : '대상 목록';
+  $('#batchName').textContent = app.batch ? app.batch.name : (n ? '작성 중인 보고서' : '대상 목록');
+  $('#batchCount').textContent = n ? `· ${n}개 시설` : '';
+  $('#shareListBtn').hidden = !app.sites.some(s => s.src);
+  $('#clearListBtn').hidden = !n;
+  const box = $('#siteList'); box.innerHTML = '';
+  if (!n){
+    const e = el('div', 'block empty');
+    e.append(el('b', null, '등록된 시설물이 없습니다'),
+      el('p', null, '출장 전에 사실관계조사 대상목록 엑셀을 불러오면 시설물마다 기본정보가 채워진 보고서가 만들어집니다. 엑셀 없이 쓰려면 「직접 입력해서 시작」을 누르세요.'));
+    box.appendChild(e); return;
+  }
+  IMP.groupByDate(app.sites, localKey(new Date())).forEach(g => {
+    const h = el('h2', 'day', g.label); h.appendChild(el('span', null, ` ${g.sites.length}곳`));
+    if (g.today) h.appendChild(el('em', 'today', '오늘'));
+    box.appendChild(h);
+    g.sites.forEach(s => box.appendChild(siteCard(s)));
+  });
+}
+function siteCard(s){
+  const m = s.meta, card = el('article', 'block site' + (s.removed ? ' removed' : ''));
+  const open = el('button', 'site-open'); open.type = 'button';
+  const l1 = el('div', 'st1');
+  l1.append(el('span', 'no', s.no || '·'), el('b', 'nm', m.facility || '(시설물명 없음)'));
+  const sg = s.src ? s.src.safetyGrade : '';
+  const tags = el('span', 'tags');
+  if (m.grade) tags.appendChild(el('span', 'tag', m.grade));
+  if (sg) tags.appendChild(el('span', 'tag' + (/^[DE]/i.test(sg) ? ' alert' : ''), sg));
+  l1.appendChild(tags);
+  const l2 = el('div', 'st2', [m.location, s.buildings ? s.buildings + '개동' : '', s.src && s.src.ampm].filter(Boolean).join(' · '));
+  const l3 = el('div', 'st3');
+  const pc = photoCount(s);
+  l3.appendChild(el('span', 'state' + (s.savedAt ? ' done' : pc ? ' doing' : ''), s.savedAt ? `저장함 · 사진 ${pc}장` : `사진 ${pc}장`));
+  if (s.removed) l3.appendChild(el('span', 'tag alert', '목록에서 빠짐'));
+  if (s.contact) l3.appendChild(el('span', 'who', '담당 ' + s.contact));
+  open.append(l1, l2, l3);
+  open.addEventListener('click', () => openSite(s.id));
+  card.appendChild(open);
+  const acts = el('div', 'acts');
+  const tel = String(s.phone || '').replace(/[^\d+]/g, '');
+  if (tel){ const a = el('a', 'btn sm', '전화'); a.href = 'tel:' + tel; a.setAttribute('aria-label', (m.facility || '') + ' 전화 ' + s.phone); acts.appendChild(a); }
+  if (m.location){
+    // 누를 때만 지도 서비스로 주소를 보냄 (자동 전송 없음)
+    const a = el('a', 'btn sm', '지도'); a.href = 'https://map.naver.com/p/search/' + encodeURIComponent(m.location);
+    a.target = '_blank'; a.rel = 'noopener noreferrer'; acts.appendChild(a);
+  }
+  if (s.removed || !s.src){
+    const d = el('button', 'btn sm dangertxt', '삭제'); d.type = 'button';
+    d.addEventListener('click', () => removeSite(s)); acts.appendChild(d);
+  }
+  if (acts.children.length) card.appendChild(acts);
+  return card;
+}
+const sitePhotoIds = s => s.sections.flatMap(x => x.photos.map(p => p.id));
+function removeSite(s){
+  const pc = photoCount(s);
+  if (!confirm(`「${s.meta.facility || '이 시설물'}」 보고서${pc ? `와 사진 ${pc}장` : ''}을 삭제할까요?`)) return;
+  sitePhotoIds(s).forEach(delPhoto);
+  app.sites = app.sites.filter(x => x !== s); persist(); renderList();
+}
+async function wipeAll(){
+  await tx('photos','readwrite', s => s.clear());
+  app.sites = []; app.batch = null; app.activeId = null;
+  await persistNow();
+}
+$('#clearListBtn').addEventListener('click', async () => {
+  const pc = app.sites.reduce((a, s) => a + photoCount(s), 0);
+  if (!confirm(`목록의 시설물 ${app.sites.length}곳${pc ? `과 사진 ${pc}장` : ''}을 이 휴대폰에서 모두 지울까요? 되돌릴 수 없습니다.`)) return;
+  await wipeAll(); renderList(); setMsg('목록을 비웠습니다.');
+});
+$('#manualBtn').addEventListener('click', () => {
+  const s = newSite(null); s.no = app.sites.reduce((a, x) => Math.max(a, x.no || 0), 0) + 1;
+  app.sites.push(s); openSite(s.id);
+});
+
+/* ---------- 엑셀·목록 파일·공유 링크로 등록 ---------- */
+$('#xlsBtn').addEventListener('click', () => { const fi = $('#xlsIn'); fi.value = ''; fi.click(); });
+$('#xlsIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    if (!window.JSZip) throw new Error('엑셀을 여는 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.');
+    if (!/\.xlsx$/i.test(f.name)) throw new Error('.xlsx 파일만 불러올 수 있습니다. 엑셀에서 「다른 이름으로 저장 › Excel 통합 문서(.xlsx)」로 저장해 주세요.');
+    const {sheets} = await SajinXlsx.readXlsx(await f.arrayBuffer(), JSZip);
+    showPreview(IMP.parseWorkbook(sheets), '엑셀');
+  }catch(err){ setMsg(err.message || '엑셀을 읽지 못했습니다.', true); }
+});
+$('#jsonBtn').addEventListener('click', () => { const fi = $('#jsonIn'); fi.value = ''; fi.click(); });
+$('#jsonIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    let o; try{ o = JSON.parse(await f.text()); }catch(x){ throw new Error('목록 파일(.json)이 아니거나 손상되었습니다.'); }
+    showPreview(Object.assign(IMP.unpackList(o), {warnings:[]}), '목록 파일');
+  }catch(err){ setMsg(err.message, true); }
+});
+function clearHash(){ if (/^#list=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search); }
+async function checkHash(){
+  const m = /^#list=(.+)$/.exec(location.hash); if (!m) return;
+  if (!listShown) showList();
+  if (!window.JSZip){ setMsg('목록을 여는 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.', true); return; }
+  try{ showPreview(Object.assign(await IMP.decodeShare(m[1], JSZip), {warnings:[]}), '공유 링크'); }
+  catch(err){ clearHash(); setMsg(err.message, true); }
+}
+window.addEventListener('hashchange', checkHash);
+
+function showPreview(data, from){
+  const sh = $('#sheet'); sh.innerHTML = '';
+  sh.appendChild(el('h3', 'ptitle', `${data.name || '대상 목록'} · ${data.rows.length}개 시설`));
+  sh.appendChild(el('p', 'sub', `${from}에서 읽은 목록입니다. 내용을 확인하고 「등록」을 누르세요.`));
+  const ul = el('ul', 'plist');
+  data.rows.forEach(r => {
+    const li = el('li'); li.append(el('span', 'no', r.no), el('b', null, r.facility));
+    li.appendChild(el('span', 'sub', ' ' + [r.dateKey ? IMP.dayLabel(r.dateKey) : '', r.ampm, r.safetyGrade].filter(Boolean).join(' · ')));
+    ul.appendChild(li);
+  });
+  sh.appendChild(ul);
+  sh.appendChild(el('p', 'sub', '자동으로 채워지는 항목: 시설물명 · 관리주체(수신처) · 위치 · 종류 · 구분(종별) · 준공일 · 안전등급 · 점검자 인원 · 점검기간·표지 날짜. 층수·연면적·최고높이는 현장에서 입력합니다.'));
+  if (data.warnings && data.warnings.length){
+    const w = el('div', 'warnbox'); w.appendChild(el('b', null, '확인이 필요한 칸'));
+    data.warnings.forEach(t => w.appendChild(el('div', null, t)));
+    sh.appendChild(w);
+  }
+  let mode = 'merge';
+  if (app.sites.length){
+    const same = app.batch && app.batch.name === data.name;
+    const fs = el('fieldset', 'modes'); fs.appendChild(el('legend', null, `이미 등록된 시설물 ${app.sites.length}곳이 있습니다`));
+    [['merge', same ? '바뀐 내용만 반영 (사진·작성 내용 유지, 직접 고친 칸 보호)' : '기존 목록을 유지하고 추가·갱신'],
+     ['replace', '전부 새로 등록 (기존 시설물·사진 삭제)']].forEach(([v, t]) => {
+      const l = el('label', 'check'); const r = document.createElement('input'); r.type = 'radio'; r.name = 'mode'; r.value = v; r.checked = v === mode;
+      r.addEventListener('change', () => { mode = v; }); l.append(r, document.createTextNode(' ' + t)); fs.appendChild(l);
+    });
+    sh.appendChild(fs);
+  }
+  const acts = el('div', 'row');
+  const bNo = btn('btn', '취소', () => { dlg.close(); });
+  const bOk = btn('btn primary', '등록', async () => {
+    if (mode === 'replace'){
+      const pc = app.sites.reduce((a, s) => a + photoCount(s), 0);
+      if (!confirm(`기존 시설물 ${app.sites.length}곳${pc ? `과 사진 ${pc}장` : ''}을 지우고 새로 등록할까요?`)) return;
+      await wipeAll();
+    }
+    const r = registerRows(data);
+    dlg.close(); renderList();
+    setMsg(r.added === data.rows.length && !r.updated ? `${data.rows.length}개 시설을 등록했습니다. 시설물을 눌러 보고서를 작성하세요.`
+      : `반영했습니다: 갱신 ${r.updated}곳, 추가 ${r.added}곳${r.missing ? `, 목록에서 빠짐 ${r.missing}곳(사진 보호를 위해 지우지 않음)` : ''}.`);
+  });
+  acts.append(bNo, bOk); sh.appendChild(acts);
+  dlg.oncancel = null; dlg.onclose = () => { dlg.onclose = null; clearHash(); };
+  dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
+  if (!dlg.open) dlg.showModal();
+}
+function registerRows(data){
+  const sameBatch = !!(app.batch && app.batch.name === data.name);
+  const r = IMP.mergeSites(app.sites, data.rows, {sameBatch, settings:app.settings, makeSite:newSite});
+  app.sites = r.sites;
+  app.batch = {name:data.name || '대상 목록', importedAt:new Date().toISOString()};
+  persistNow();
+  return r;
+}
+
+/* ---------- 목록 공유: 링크(# 뒤, 서버로 전송되지 않음) 또는 목록 파일 ---------- */
+const LINK_MAX = 6000;
+$('#shareListBtn').addEventListener('click', () => {
+  const rows = app.sites.filter(s => s.src && !s.removed).map(s => s.src);
+  const name = app.batch ? app.batch.name : '대상 목록';
+  const sh = $('#sheet'); sh.innerHTML = '';
+  sh.appendChild(el('h3', 'ptitle', `목록 공유 · ${rows.length}개 시설`));
+  sh.appendChild(el('p', 'sub', '함께 가는 실원에게 보내면 같은 목록이 등록됩니다. 엑셀에서 온 정보만 들어가고 사진·작성 내용은 들어가지 않습니다. 링크의 정보는 주소의 # 뒤에 있어 서버로 전송되지 않습니다.'));
+  const opt = {withTravelers:true, withContact:false};
+  [['withTravelers', '출장자 이름 포함 (빼도 인원 수는 유지)'], ['withContact', '연락처·담당자 포함']].forEach(([k, t]) => {
+    const l = el('label', 'check'); const x = document.createElement('input'); x.type = 'checkbox'; x.checked = opt[k];
+    x.addEventListener('change', () => { opt[k] = x.checked; make(); }); l.append(x, document.createTextNode(' ' + t)); sh.appendChild(l);
+  });
+  const ta = document.createElement('textarea'); ta.readOnly = true; ta.rows = 3; ta.className = 'linkbox'; ta.setAttribute('aria-label', '공유 링크');
+  const info = el('p', 'sub');
+  const r1 = el('div', 'row');
+  // 복사·공유는 터치 직후에 바로 실행되어야 하므로 링크를 미리 만들어 둠
+  const bCopy = btn('btn primary', '링크 복사', async () => {
+    try{ await navigator.clipboard.writeText(link); info.textContent = '복사했습니다. 메신저에 붙여 넣어 보내세요.'; }
+    catch(e){ ta.focus(); ta.select(); info.textContent = '위 링크를 길게 눌러 복사하세요.'; }
+  });
+  const bSend = btn('btn', '링크 보내기', async () => {
+    try{ await navigator.share({title:name, text:name + ' 대상 목록', url:link}); }catch(e){}
+  });
+  bSend.hidden = !navigator.share;
+  r1.append(bCopy, bSend);
+  const bFile = btn('btn', '목록 파일로 저장 (.json)', async () => {
+    const m = /(\d+)\s*년\s*(\d+)\s*차/.exec(name);
+    const fname = `대상목록_${m ? `${m[1]}년${m[2]}차` : (clean(name).replace(/\s+/g, '').slice(0, 20) || '목록')}.json`;
+    const file = new File([JSON.stringify(IMP.packList(name, rows, opt))], fname, {type:'application/json'});
+    try{
+      if (downloads) await downloads.save({filename:fname, data:file}); else plainDownload(file);
+      info.textContent = `저장했습니다: ${fname} → 메일·메신저로 보내면 받는 사람이 「목록 파일 불러오기」로 등록합니다.`;
+    }catch(e){ info.textContent = '저장하지 못했습니다.'; }
+  });
+  const bClose = btn('btn', '닫기', () => dlg.close());
+  sh.append(ta, r1, info, bFile, bClose);
+  let link = '';
+  async function make(){
+    const code = await IMP.encodeShare(IMP.packList(name, rows, opt), JSZip);
+    link = location.href.split('#')[0] + '#list=' + code;
+    const tooLong = link.length > LINK_MAX;
+    ta.value = tooLong ? '' : link; bCopy.disabled = bSend.disabled = tooLong;
+    info.textContent = tooLong ? `목록이 커서 링크가 너무 깁니다(${link.length.toLocaleString()}자). 아래 「목록 파일로 저장」으로 공유하세요.` : `링크 길이 ${link.length.toLocaleString()}자`;
+  }
+  dlg.oncancel = null; dlg.onclose = null;
+  dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
+  if (!dlg.open) dlg.showModal();
+  if (window.JSZip) make(); else info.textContent = '도구를 불러오지 못했습니다. 새로고침하세요.';
 });
 
 load();

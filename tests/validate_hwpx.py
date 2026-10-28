@@ -1,10 +1,11 @@
 """생성된 HWPX의 구조를 검사한다. (한글 프로그램 없이 확인 가능한 범위)
-사용: python3 tests/validate_hwpx.py tests/out/sample.hwpx
+사용: python3 tests/validate_hwpx.py tests/out/sample.hwpx [시설물명]
 """
 import re, sys, zipfile
 from lxml import etree
 
 path = sys.argv[1]
+facility = sys.argv[2] if len(sys.argv) > 2 else '시험체육관'
 z = zipfile.ZipFile(path)
 names = z.namelist()
 errors = []
@@ -35,7 +36,7 @@ for kind in ['tbl', 'pic']:
     check(len(ids) == len(set(ids)), f'{kind} id 중복')
 
 texts = re.findall(r'<hp:t>([^<]*)</hp:t>', sec)
-for must in ['개 요', '시설물명 : 시험체육관', '외관조사의 적정성', '(슬래브 균열)', '보수', '부실예방']:
+for must in ['개 요', f'시설물명 : {facility}', '외관조사의 적정성', '(슬래브 균열)', '보수', '부실예방']:
     check(any(must in t for t in texts), f'본문에 "{must}" 없음')
 
 if errors:

@@ -10,7 +10,10 @@ const rd = p => readFileSync(join(root, p), 'utf8');
 const shell = rd('src/index.html');
 const css = rd('src/styles.css').trimEnd();
 const gen = rd('src/hwpxgen.js').trimEnd();
+const xlsx = rd('src/xlsxreader.js').trimEnd();
+const imp = rd('src/importer.js').trimEnd();
 const app = rd('src/app.js').trimEnd();
+const VERSION = '2026.10.28-C';
 const tpl = JSON.stringify(JSON.parse(rd('template/tpl.json'))).replace(/<\//g, '<\\/');
 const b64 = rd('template/base.b64').trim();
 
@@ -20,9 +23,9 @@ for (const [name, marker] of [['src/index.html', '/*@@STYLE@@*/'], ['src/index.h
 const scripts =
   `<script type="application/json" id="hwpxTpl">${tpl}</script>\n` +
   `<script type="text/plain" id="hwpxBase">${b64}</script>\n` +
-  `<script>\n${gen}\n</script>\n<script>\n${app}\n</script>`;
+  [gen, xlsx, imp, app].map(js => `<script>\n${js}\n</script>`).join('\n');
 
-const html = shell.replace('/*@@STYLE@@*/', () => css).replace('<!--@@SCRIPTS@@-->', () => scripts);
+const html = shell.replaceAll('@@VERSION@@', VERSION).replace('/*@@STYLE@@*/', () => css).replace('<!--@@SCRIPTS@@-->', () => scripts);
 for (const out of ['index.html', 'dist/index.html']) {
   mkdirSync(dirname(join(root, out)), { recursive: true });
   writeFileSync(join(root, out), html);

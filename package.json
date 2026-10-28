@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/build.mjs && node tests/make_sample.mjs && python3 tests/validate_hwpx.py tests/out/sample.hwpx",
+    "test": "node scripts/build.mjs && node tests/test_importer.mjs && node tests/make_sample.mjs && python3 tests/validate_hwpx.py tests/out/sample.hwpx && python3 tests/validate_hwpx.py tests/out/site.hwpx 마바아파트",
+    "fixtures": "python3 tests/make_fixture_xlsx.py",
     "template": "python3 scripts/prepare_template.py"
   },
   "devDependencies": {
