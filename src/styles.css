@@ -67,11 +67,17 @@ header.top .stripe{display:none}
 #setBtn{padding:6px 12px 6px 10px}
 
 .block{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);margin-top:12px;box-shadow:var(--shadow)}
-details.block>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:700}
+details.block>summary{list-style:none;cursor:pointer;padding:14px 16px;min-height:56px;display:flex;align-items:center;gap:8px;font-size:17px;font-weight:700}
 details.block>summary::-webkit-details-marker{display:none}
-details.block>summary::after{content:"펼치기";font-size:13px;font-weight:500;color:var(--accent)}
+details.block>summary .st{justify-content:flex-start;margin-right:auto}
+details.block>summary .st::before{color:var(--accent)}
+details.block>summary::after{content:"펼치기";order:2;font-size:14px;font-weight:700;color:var(--accent)}
 details[open].block>summary::after{content:"접기"}
-.form{padding:0 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+details.block>summary .chv{order:3;color:var(--accent);transition:transform .18s}
+details[open].block>summary .chv{transform:rotate(180deg)}
+.need-badge{display:none;align-items:center;height:24px;padding:0 8px;border-radius:6px;background:var(--gold);color:#1C2733;font-size:13px;font-weight:700;white-space:nowrap}
+#metaBox.no-facility .need-badge{display:inline-flex}
+.form{padding:0 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form .full{grid-column:1/-1}
 label.f{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--ink2);font-weight:700}
 input[type=text],input[type=number],input[type=password],input[type=email],textarea,select{width:100%;border:1.5px solid var(--line);background:var(--field);border-radius:8px;padding:10px 12px;font-size:16px;font-weight:500;color:var(--ink)}
@@ -85,26 +91,31 @@ button:focus-visible,summary:focus-visible,a:focus-visible,.pick:focus-within{ou
 
 .sec{padding:14px 16px 16px}
 .sec-head{display:flex;gap:8px;align-items:center}
-.sec-head .mark{font-weight:700;color:var(--accent);flex:none}
 .sec-head{align-items:flex-start}
-.sec-head .mark{padding-top:7px}
+.sec-head .mark{flex:none;width:28px;height:28px;margin-top:4px;border-radius:50%;background:var(--tint);color:var(--primary);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+.sec-head .goldtag{flex:none;margin-top:6px;border-color:var(--gold);color:var(--gold-ink)}
+.sec.prop{box-shadow:inset 4px 0 0 var(--gold),var(--shadow)}
+.oplabel{margin-top:12px}
+.oplabel textarea{margin-top:0}
 .sec-head textarea.tin{font-size:17px;font-weight:700;background:transparent;border:1px solid transparent;padding:6px 8px;margin:0 0 0 -4px;min-height:0;resize:none;overflow:hidden;line-height:1.4;flex:1;field-sizing:content}
 .sec-head textarea.tin:hover,.sec-head textarea.tin:focus{border-color:var(--line);background:var(--field)}
 .icon{flex:none;width:40px;height:40px;border-radius:var(--r-btn);border:1px solid var(--line);background:var(--panel);cursor:pointer;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;padding:0}
 .icon.del{color:var(--error)}
 .icon:disabled{opacity:.3;cursor:default}
 .sec textarea{margin-top:8px}
-.kind{font-size:14px;color:var(--ink2);margin:6px 0 0}
+.kind{font-size:14px;color:var(--warn-ink);background:var(--warn-bg);border-radius:8px;padding:8px 10px;margin:10px 0 0}
 
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.ph{border:1px solid var(--ink);background:var(--panel);cursor:pointer;padding:0;text-align:center;border-radius:2px;display:flex;flex-direction:column}
+/* 사진 미리보기: 보고서 모양(검은 실선·명조 캡션) 유지, 번호·안내만 덧붙임 */
+.ph{position:relative;border:1px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;padding:0;text-align:center;border-radius:2px;display:flex;flex-direction:column}
 .ph .img{aspect-ratio:4/3;background:var(--field);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .ph img{max-width:100%;max-height:100%;display:block}
 .ph .cap{border-top:1px solid var(--ink);padding:5px 6px;font-size:13px;line-height:1.35;min-height:44px;font-family:"Batang","Noto Serif KR",serif}
 .ph .cap em{display:block;font-style:normal;font-size:13px;color:var(--ink2)}
-.ph .n{position:absolute}
-.add{margin-top:12px;width:100%;border:2px dashed var(--line);background:transparent;border-radius:10px;padding:14px;font-weight:700;color:var(--accent);cursor:pointer;font-size:15px}
-.add.busy{color:var(--ink2)}
+.ph .n{position:absolute;left:4px;top:4px;z-index:1;min-width:22px;height:22px;padding:0 5px;border-radius:6px;background:var(--primary);color:var(--on-primary);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:"Pretendard",sans-serif}
+.ph .cap .need{display:block;margin-top:2px;font-family:"Pretendard",sans-serif;font-size:13px;font-weight:700;color:var(--gold-ink)}
+.add{margin-top:12px;width:100%;min-height:56px;border:2px dashed var(--accent);background:var(--tint);border-radius:var(--r-btn);padding:12px;font-weight:700;color:var(--accent);cursor:pointer;font-size:16px}
+.add.busy{border-color:var(--line);color:var(--soft)}
 .addsec{margin-top:14px;width:100%;min-height:48px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-btn);padding:10px 12px;color:var(--ink);cursor:pointer;font-size:15px;font-weight:700}
 .addsec.dangertxt{color:var(--error)}
 #clearListBtn,#resetBtn{margin-top:32px}
@@ -112,8 +123,13 @@ button:focus-visible,summary:focus-visible,a:focus-visible,.pick:focus-within{ou
 .bar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
   padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));z-index:5}
 .bar .inner{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:12px}
-.bar .count{font-size:13px;color:var(--ink2);flex:none}
-.bar .count b{display:block;font-size:20px;color:var(--ink)}
+.bar{box-shadow:0 -4px 16px rgba(0,48,124,.08)}
+.bar #msg{margin:0 auto 8px;max-height:30vh;overflow:auto}
+.bar .msgline{margin:-4px auto 6px}
+/* 하단 바 높이만큼 본문 아래 여백 (JS 가 --bar-h 를 넣음) → 저장 안내가 길어져도 입력칸·사진을 가리지 않음 */
+#editView{padding-bottom:calc(var(--bar-h) + 24px)}
+.bar .count{font-size:13px;color:var(--soft);flex:none}
+.bar .count b{display:block;font-size:20px;font-weight:700;color:var(--ink)}
 .save{flex:1;min-width:0;min-height:52px;background:var(--primary);color:var(--on-primary);border:1px solid var(--primary);border-radius:var(--r-btn);padding:10px 12px;font-weight:700;font-size:16px;cursor:pointer}
 .save:disabled,.mail:disabled{opacity:.4;cursor:default}
 .mail{flex:none;min-height:52px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-btn);padding:10px 14px;font-weight:700;font-size:15px;cursor:pointer}
@@ -127,13 +143,18 @@ button:focus-visible,summary:focus-visible,a:focus-visible,.pick:focus-within{ou
 dialog{border:0;padding:0;border-radius:18px 18px 0 0;width:100%;max-width:720px;margin:auto auto 0;background:var(--panel);color:var(--ink);max-height:92vh}
 dialog::backdrop{background:rgba(5,15,30,.55)}
 .sheet{padding:12px 20px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;overflow:auto;max-height:92vh}
+.sheet>*{flex:none}
 .sheet::before{content:"";flex:none;align-self:center;width:40px;height:4px;border-radius:2px;background:var(--line)}
-.sheet .prev{background:#000;border-radius:8px;display:flex;justify-content:center;max-height:38vh}
-.sheet .prev img{max-width:100%;max-height:38vh;object-fit:contain}
+.sheet .prev{background:#000;border-radius:10px;overflow:hidden;display:flex;justify-content:center;max-height:36vh}
+.sheet .prev img{max-width:100%;max-height:36vh;object-fit:contain}
+.pcount{margin:0;font-size:13px;font-weight:700;color:var(--soft)}
+.sheetacts{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom,0px));background:var(--panel);padding:10px 0 calc(20px + env(safe-area-inset-bottom,0px));margin-bottom:calc(-20px - env(safe-area-inset-bottom,0px))}
+.sheetacts .btn{min-height:52px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{border:1px solid var(--line);background:var(--field);border-radius:999px;padding:6px 12px;min-height:38px;font-size:15px;font-weight:500;cursor:pointer}
 .chips button:active{background:var(--tint)}
 .chips .lbl{font-size:13px;font-weight:700;color:var(--ink2);width:100%}
+.chips .clear{color:var(--error)}
 .row{display:flex;gap:8px}
 .row>*{flex:1}
 /* 버튼: 주 = 남색 한 가지, 보조 = 흰 바탕 테두리, 위험 = 보조 모양 + 빨간 글자 */

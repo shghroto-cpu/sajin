@@ -37,7 +37,7 @@
 
 <main class="wrap" id="editView" hidden>
   <details class="block" id="metaBox">
-    <summary>기본정보</summary>
+    <summary><span class="st" data-icon="file">기본정보</span><span class="need-badge">시설물명 미입력</span><span class="chv" data-icon="down" aria-hidden="true"></span></summary>
     <div class="form" id="metaForm"></div>
   </details>
   <div id="sections"></div>
@@ -46,11 +46,13 @@
   <p class="sub" style="margin-top:14px">사진과 입력 내용은 이 휴대폰 브라우저에만 저장되며, 어디에도 업로드되지 않습니다.<br>앱 버전 @@VERSION@@</p>
 </main>
 
-<div class="bar" id="bar" hidden><div class="inner">
+<div class="bar" id="bar" hidden>
+  <p class="msg" id="msg" role="status"></p><p class="msgline"><button class="linkbtn" id="copyToBtn" type="button" hidden></button></p>
+  <div class="inner">
   <div class="count">사진<b id="cnt">0장</b></div>
   <button class="save" id="saveBtn" type="button" data-icon="save">파일 저장 (메일 첨부용)</button>
   <button class="mail" id="mailBtn" type="button" data-icon="share">공유</button>
-</div><p class="msg" id="msg" role="status"></p><p class="msgline"><button class="linkbtn" id="copyToBtn" type="button" hidden></button></p></div>
+</div></div>
 
 <input type="file" id="fileIn" accept="image/*" multiple hidden>
 <input type="file" id="listIn" hidden>

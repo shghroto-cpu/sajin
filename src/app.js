@@ -87,6 +87,7 @@ let saveTimer = null;
 function persist(){ clearTimeout(saveTimer); saveTimer = setTimeout(persistNow, 400); }
 function persistNow(){ clearTimeout(saveTimer); saveTimer = null; return tx('kv','readwrite', s => s.put(JSON.stringify(app),'appState')); }
 window.addEventListener('pagehide', () => { if (saveTimer) persistNow(); });
+if (window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--bar-h', $('#bar').offsetHeight + 'px')).observe($('#bar'));
 // iOS(사파리·인앱브라우저)에서 저장된 Blob이 깨지는 문제 방지: 사진을 바이트(ArrayBuffer)로 저장
 const putPhoto = async (id, blob) => { let buf; try{ buf = await blob.arrayBuffer(); }catch(e){ return; } return tx('photos','readwrite', s => s.put({buf, type:'image/jpeg'}, id)); };
 async function toFreshBlob(v){
@@ -270,12 +271,14 @@ function updateHeader(){
   $('#hdrSub').textContent = state.meta.facility ? (state.no ? state.no + '. ' : '') + state.meta.facility : '새 보고서';
   const n = state.sections.reduce((a, s) => a + s.photos.length, 0);
   $('#cnt').textContent = n + '장';
+  $('#metaBox').classList.toggle('no-facility', !state.meta.facility);
 }
 
 function captionHTML(p){
   const t = document.createElement('div'); t.className = 'cap';
   t.textContent = p.label || state.meta.defaultLabel || '합동점검 사진';
   if (p.desc){ const e = document.createElement('em'); e.textContent = '(' + p.desc + ')'; t.appendChild(e); }
+  else { const e = document.createElement('span'); e.className = 'need'; e.textContent = '눌러서 설명 입력'; t.appendChild(e); }
   return t;
 }
 
@@ -284,7 +287,7 @@ function renderSections(){
   const results = state.sections.filter(s => s.type !== 'proposal');
   state.sections.forEach((s, idx) => {
     const isProp = s.type === 'proposal';
-    const el = document.createElement('section'); el.className = 'block sec';
+    const el = document.createElement('section'); el.className = 'block sec' + (isProp ? ' prop' : '');
     const head = document.createElement('div'); head.className = 'sec-head';
     const mark = document.createElement('span'); mark.className = 'mark'; mark.textContent = isProp ? '□' : 'ㅇ';
     const ti = document.createElement('textarea'); ti.className = 'tin'; ti.rows = 1; ti.value = s.title; ti.setAttribute('aria-label','항목 제목');
@@ -292,6 +295,7 @@ function renderSections(){
     ti.addEventListener('input', () => { ti.value = ti.value.replace(/\n/g,''); s.title = ti.value; fit(); persist(); });
     requestAnimationFrame(fit);
     head.append(mark, ti);
+    if (isProp){ const t = document.createElement('span'); t.className = 'tag goldtag'; t.textContent = '별도 장'; head.appendChild(t); }
     if (!isProp){
       const ri = results.indexOf(s);
       const up = withIcon(btn('icon','', () => moveSec(s, -1), '위로'), 'up'); up.disabled = ri === 0;
@@ -306,16 +310,18 @@ function renderSections(){
       ta.placeholder = isProp ? '예) 외관조사망도에 제시된 손상을 참고하여 지속적으로 관리 필요' : '현장 확인 의견 (줄을 바꾸면 - 항목이 나뉩니다)';
       ta.value = s.opinion || '';
       ta.addEventListener('input', () => { s.opinion = ta.value; persist(); });
-      el.appendChild(ta);
+      const lb = document.createElement('label'); lb.className = 'f oplabel'; lb.textContent = isProp ? '제안 내용' : '현장 확인 의견';
+      lb.appendChild(ta); el.appendChild(lb);
     }
     if (s.photos.length){
       const g = document.createElement('div'); g.className = 'grid';
-      s.photos.forEach(p => {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'ph';
+      s.photos.forEach((p, pi) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'ph' + (p.desc ? '' : ' need-desc');
         b.setAttribute('aria-label', '사진 편집: ' + (p.desc || '설명 없음'));
         const im = document.createElement('div'); im.className = 'img';
         const img = document.createElement('img'); img.src = urls.get(p.id) || ''; img.alt = ''; im.appendChild(img);
-        b.append(im, captionHTML(p));
+        const no = document.createElement('span'); no.className = 'n'; no.textContent = pi + 1;
+        b.append(no, im, captionHTML(p));
         b.addEventListener('click', () => openSheet(s.id, p.id));
         g.appendChild(b);
       });
@@ -386,6 +392,7 @@ function openSheet(secId, pid){
   const sh = $('#sheet'); sh.innerHTML = '';
   const prev = document.createElement('div'); prev.className = 'prev';
   const img = document.createElement('img'); img.src = urls.get(p.id); img.alt = '선택한 사진'; prev.appendChild(img);
+  const pos = document.createElement('p'); pos.className = 'pcount'; pos.textContent = `${i + 1}번째 사진 / 전체 ${s.photos.length}장`;
 
   const lblWrap = document.createElement('label'); lblWrap.className = 'f'; lblWrap.textContent = '사진 제목 (첫째 줄)';
   const sel = document.createElement('select');
@@ -408,7 +415,7 @@ function openSheet(secId, pid){
   const l2 = document.createElement('span'); l2.className = 'lbl'; l2.textContent = '손상·상태'; chips.appendChild(l2);
   DAMAGE.forEach(t => chips.appendChild(btn('', t, () => addChip(t))));
   chips.appendChild(btn('', '확인', () => addChip('확인')));
-  chips.appendChild(btn('', '지우기', () => { desc.value = ''; }));
+  chips.appendChild(btn('clear', '지우기', () => { desc.value = ''; }));
 
   const mvWrap = document.createElement('label'); mvWrap.className = 'f'; mvWrap.textContent = '들어갈 항목';
   const mv = document.createElement('select');
@@ -421,7 +428,7 @@ function openSheet(secId, pid){
   bPrev.disabled = i === 0; bNext.disabled = i === s.photos.length - 1;
   order.append(bPrev, bNext);
 
-  const acts = document.createElement('div'); acts.className = 'row';
+  const acts = document.createElement('div'); acts.className = 'row sheetacts';
   const bDel = btn('btn danger','사진 삭제', () => {
     if (!confirm('이 사진을 삭제할까요?')) return;
     s.photos.splice(s.photos.indexOf(p), 1); dropPhoto(p.id); persist(); dlg.close(); renderSections();
@@ -440,7 +447,8 @@ function openSheet(secId, pid){
   }
   dlg.onclose = null;
   dlg.oncancel = (e) => { commit(); renderSections(); };
-  sh.append(prev, lblWrap, descWrap, chips, mvWrap, order, acts);
+  bDel.dataset.icon = 'trash';
+  sh.append(pos, prev, lblWrap, descWrap, chips, mvWrap, order, acts);
   if (!dlg.open) dlg.showModal();
   dlg.onclick = ev => { if (ev.target === dlg){ commit(); dlg.close(); renderSections(); } };
 }
