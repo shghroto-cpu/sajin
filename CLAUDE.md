@@ -13,8 +13,8 @@
 
 ## 절대 지켜야 할 제약
 1. **배포 결과물은 `index.html` 한 파일.** 외부 파일 참조 금지(이미지·CSS·JS 모두 인라인).
-   예외: JSZip CDN(`cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1`), Google Fonts.
-   **허용 외부 코드 (파일 안에 내장, CDN 금지, 버전 고정 + 라이선스 주석 유지)**: fflate `0.8.2`(MIT), qrcode-generator `1.4.4`(MIT), jsQR `1.4.0`(Apache-2.0).
+   예외: JSZip CDN(`cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1`) 하나뿐. (Google Fonts 는 2026-10 디자인 개선 때 없앰 → 글꼴 내장)
+   **허용 외부 코드 (파일 안에 내장, CDN 금지, 버전 고정 + 라이선스 주석 유지)**: fflate `0.8.2`(MIT), qrcode-generator `1.4.4`(MIT), jsQR `1.4.0`(Apache-2.0), 글꼴 Pretendard `1.3.9`(SIL OFL 1.1, 한글 서브셋 500·700 — `scripts/build.mjs` 의 `FONTS`, 앱·관리 파일 모두).
    `npm install`로 받은 `node_modules`에서 빌드가 넣는다(`scripts/build.mjs`의 `LIBS`, 버전이 다르면 빌드 실패). admin.html 은 jsQR 없이 나머지 둘만.
 2. **서버·외부 API 호출 금지.** 사진과 입력값은 휴대폰 브라우저(IndexedDB)에만 저장한다. 분석 도구·로그 수집도 넣지 않는다.
    **대상목록은 외부 서버(GitHub·클라우드)에 두지 않는다 — 기관 메일 첨부(.sajin)로만 전달.** 앱은 목록을 어디서도 받거나 보내지 않는다.
@@ -58,6 +58,7 @@ tests/
   make_fixture_lists.mjs 브라우저 테스트용 .sajin (가짜 1팀·2팀·2팀 새 판) + QR 주소(qr.json)·가짜 카메라 영상(qr_cam.y4m)
   make_sample.mjs       생성기로 tests/out/sample.hwpx, site.hwpx(가짜 엑셀 3번 시설) 생성
   validate_hwpx.py      HWPX 구조 검사 (mimetype, XML 문법, 그림 연결, id 중복, 남은 자리표시)
+  ui_shots.py           (선택) 디자인 비교 캡처: 폭 360·390·430 × 라이트·다크 8화면 + 관리 화면, --compare 로 전·후 나란히
   e2e_browser.py        (선택) 엑셀 등록·사진·메일/저장 문구·예전 자료 + .sajin 불러오기·팀 구분·갱신 + 오프라인 admin.html (외부 요청 0건)
   fixtures/             테스트용 사진, 가짜 대상목록 엑셀 (실제 엑셀은 절대 넣지 않음)
 docs/                   배포 절차(코워크용), 개선 과제, 개발지시서, 대상목록_운영방법.md(담당자용)
@@ -145,6 +146,17 @@ secOpen → head(표지~"개 요", {{DATE}})
 - 팀 비밀번호 파일: `list-passphrase-<팀 이름에서 공백·괄호 등 뺌>.txt` (예: 「1팀 (부산권)」 → `list-passphrase-1팀부산권.txt`). 없으면 스크립트가 만들 파일 이름을 안내.
 - 팀 하나 비밀번호 변경: 담당자가 그 팀 파일을 새 비밀번호로 다시 저장하면 끝 (배포 불필요).
 - 모든 팀 키 교체(드묾): `npm run rotate-key` → `npm run build` → `git add data/crypto.json index.html` → 커밋 → push
+
+## 화면 디자인 규칙 (지시서 5 — `docs/UI_디자인_개선_작업지시서.md`, 원문 `docs/KALIS_UI_디자인지침.md`)
+- 색은 `src/styles.css` 맨 위 토큰만 쓴다 (라이트·다크 두 곳 같은 이름). KALIS CI: `--navy-deep #00307C` `--navy #004098` `--blue #007AC3` `--green #00873B` `--gold #C8B05A` `--gold-ink #8C7424` `--error #C0392B`.
+  역할: `--primary`(주 버튼·번호) `--accent`(링크·포커스·강조) `--panel`·`--bg`·`--field` `--ink`·`--ink2`·`--soft` `--ok-/--warn-/--err-bg·ink` `--appbar`(앱 바 그라데이션). 옛 `--vis`·`--surface`·`--danger` 는 없앰.
+- **주 버튼은 남색(`--primary`) 한 가지.** 보조 = 흰 바탕 + 테두리, 위험 = 보조 모양 + 빨간 글자. 버튼 48px(작은 것 40px, 하단 바 52px), 글자 줄바꿈 금지.
+- 안전등급 고정색(다크 모드도 같음): A `--g-a` 초록 · B `--g-b` 파랑 · C `--g-c` 남색 · D·E `--g-alert` 빨강(`.tag.alert` 유지). 종별(1·2·3종)은 테두리만(`--j1~3`).
+- 글꼴 Pretendard 500(긴 설명)·700(제목·라벨·버튼·숫자). **최소 글자 13px, 입력칸 16px 미만 금지**(아이폰 자동 확대). 보조 설명 `.sub` 14px `--soft`.
+- 아이콘은 `app.js` 의 `ICON`(직접 그린 SVG) → 버튼에 `data-icon="이름"`(CSS 마스크). 버튼 글자를 JS 로 바꿔도 아이콘이 남는다. 외부 아이콘 묶음 금지.
+- 알림은 `.msg` 가 글이 있을 때만 상자로 보임. 하단 바 높이는 `--bar-h`(ResizeObserver) → 편집 화면 아래 여백 = 바 높이 + 24px (안내가 길어도 가리지 않음).
+- **고정(바꾸지 않음):** 인쇄용 `.ppage`·`@media print`, QR 그림(흰 바탕·여백 4칸), 사진 미리보기 `.ph` 의 보고서 모양(검은 실선·명조 캡션).
+- 테스트가 쓰는 id·class·버튼 글자는 이름을 바꾸지 않는다 (지시서 5 §0-4 목록). 클래스 추가는 괜찮다.
 
 ## 알려진 휴대폰 제약 (중요)
 - **아이폰은 한 번 누를 때 파일을 하나만 내려받는다.** 저장은 항상 zip 하나(보고서 + `사진/` 폴더)로 만든다.

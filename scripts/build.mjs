@@ -20,7 +20,7 @@ const lcr = rd('src/listcrypto.js').trimEnd();
 const qrc = rd('src/qrcodec.js').trimEnd();
 const adm = rd('src/admin.js').trimEnd();
 const app = rd('src/app.js').trimEnd();
-const VERSION = '2026.10.30-H';
+const VERSION = '2026.10.30-UI';
 const tpl = JSON.stringify(JSON.parse(rd('template/tpl.json'))).replace(/<\//g, '<\\/');
 const b64 = rd('template/base.b64').trim();
 
