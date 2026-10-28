@@ -11,3 +11,10 @@ template/source/*.hwp
 *.hwpx
 *.hwp
 !tests/fixtures/sample_list*.xlsx
+
+# 대상목록 팀 비밀번호 파일 (절대 올리지 않음)
+list-passphrase*.txt
+
+# 대상목록 파일 (기관 메일로만 전달, 저장소에 두지 않음)
+*.sajin
+data/lists/

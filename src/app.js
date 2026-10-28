@@ -1,5 +1,8 @@
 (() => {
 'use strict';
+// QR 로 열린 주소(#q=…)는 가장 먼저 꺼내고 주소에서 지운다 (방문 기록에 남지 않게). 처리는 load() 끝에서
+const bootQr = /^#q=/.test(location.hash) ? location.hash : '';
+if (bootQr) history.replaceState(null, '', location.pathname + location.search);
 const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const today = new Date();
@@ -77,12 +80,21 @@ const delPhoto = id => tx('photos','readwrite', s => s.delete(id));
 const getKV = (db, key) => new Promise(res => { const r = db.transaction('kv').objectStore('kv').get(key); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
 
 async function load(){
+  if (adminMode){ startAdmin(); return; }
   try{
     const db = await idb();
     const raw = await getKV(db, 'appState');
     if (raw){
       const st = JSON.parse(raw);
       if (st && Array.isArray(st.sites)) app = Object.assign(defaultApp(), st, {settings:Object.assign(defaultApp().settings, st.settings)});
+      if (app.remote){
+        // 지시서 2(서버 팀 칸) 방식으로 받은 목록: 시설물·사진은 그대로 두고 「이전 방식으로 받은 목록」으로 표시
+        const sl = app.remote.slots || {}; app.legacySlots = {};
+        Object.keys(sl).forEach(n => { if (sl[n].teamName) app.legacySlots[n] = sl[n].teamName; });
+        T().myName = app.remote.myName || ''; T().nameAsked = !!app.remote.nameAsked;
+        delete app.remote; persist();
+      }
+      tx('kv','readwrite', x => x.delete('listKey'));
     } else {
       // 예전 버전(보고서 1건, 'draft') 자료를 시설물 1건으로 옮김. 옮긴 결과가 저장된 뒤에만 예전 자료를 지움
       const old = await getKV(db, 'draft');
@@ -96,9 +108,11 @@ async function load(){
       }
     }
   }catch(e){}
+  await loadQrParts();
   const open = app.sites.find(s => s.id === app.activeId);
-  if (open) await openSite(open.id); else showList();
+  if (open && !bootQr) await openSite(open.id); else showList();
   checkHash();
+  if (bootQr) receiveQr(bootQr, false);
 }
 // 시설물 사진 불러오기 (열 때만 읽어 메모리를 아낌)
 async function loadPhotos(site){
@@ -124,7 +138,7 @@ let listShown = false;
 function showView(list){
   listShown = list;
   $('#listView').hidden = !list; $('#editView').hidden = list; $('#bar').hidden = list;
-  $('#backBtn').hidden = list; $('#resetBtn').hidden = list;
+  $('#backBtn').hidden = list; $('#resetBtn').hidden = list; $('#setBtn').hidden = !list;
   window.scrollTo(0, 0);
 }
 async function openSite(id){
@@ -485,9 +499,8 @@ $('#saveBtn').addEventListener('click', () => busy($('#saveBtn'), '파일 만드
     } else {
       const bundle = await makeBundle(report, photos);
       plainDownload(bundle); markSaved();
-      setMsg(photos.length
-        ? `내려받았습니다: ${bundle.name} → ${WHERE}. 한글 보고서와 사진 폴더가 함께 들어 있고, 이 압축파일을 그대로 메일에 첨부하면 됩니다.`
-        : `내려받았습니다: ${bundle.name} → ${WHERE}에 있습니다.`);
+      setMsg(`${WHERE}에 저장했습니다: ${bundle.name}. 사파리에서 기관 웹메일에 들어가 새 메일 → 파일 첨부 → 「파일 앱 › 다운로드」에서 이 파일을 고르세요.` +
+        (photos.length ? ' (한글 보고서와 사진 폴더가 함께 들어 있는 압축파일입니다)' : ''));
     }
   }catch(e){
     const code = e && e.code;
@@ -497,11 +510,12 @@ $('#saveBtn').addEventListener('click', () => busy($('#saveBtn'), '파일 만드
     else setMsg((e && e.message) || '파일을 만들지 못했습니다. 다시 시도하세요.', true);
   }
 }));
-// ---- 메일로 보내기: 휴대폰 공유창(메일·카카오톡 등)으로 한글 파일+사진 첨부 ----
+// ---- 공유: 휴대폰 공유창으로 한글 파일+사진 보내기 (기관 메일은 공유창에 없어 「파일에 저장」 → 사파리 웹메일 첨부가 기본) ----
 let editVer = 0, prepared = null;
 ['input','change','click'].forEach(ev => document.getElementById('sections').addEventListener(ev, () => { editVer++; }, true));
 document.getElementById('metaForm').addEventListener('input', () => { editVer++; }, true);
-const WHERE = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? '‘파일’ 앱 › 다운로드 폴더' : '‘내 파일’ › 다운로드 폴더';
+const WHERE = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? '파일 앱 › 다운로드' : '내 파일 › 다운로드';
+const SHARE_TIP = '기관 메일은 공유 창에 없습니다. 공유 창에서 「파일에 저장」을 고른 뒤, 사파리에서 기관 웹메일에 들어가 파일을 첨부하세요.';
 async function prepareFiles(){
   const report = await buildReport();
   return [report, ...(app.settings.withPhotos !== false ? photoFiles() : [])];
@@ -519,15 +533,15 @@ $('#mailBtn').addEventListener('click', async () => {
     // 이미 만들어 둔 파일이 있으면 바로 공유창 열기 (터치 직후라 막히지 않음)
     if (prepared && prepared.ver === editVer){
       await shareNow(prepared.files); markSaved();
-      setMsg('메일 앱을 고르면 보고서와 사진이 첨부됩니다.');
+      setMsg(SHARE_TIP);
       return;
     }
     btn.disabled = true; btn.textContent = '파일 만드는 중…';
     prepared = {ver: editVer, files: await prepareFiles()};
-    btn.disabled = false; btn.textContent = '메일로 보내기';
+    btn.disabled = false; btn.textContent = '공유';
     try{
       await shareNow(prepared.files); markSaved();
-      setMsg('메일 앱을 고르면 보고서와 사진이 첨부됩니다.');
+      setMsg(SHARE_TIP);
     }catch(e){
       if (e && e.name === 'NotAllowedError' && navigator.share && !window.claude){
         // 파일 만드는 시간이 길어 휴대폰이 공유창을 막은 경우: 한 번 더 누르면 바로 열림
@@ -538,7 +552,7 @@ $('#mailBtn').addEventListener('click', async () => {
       throw e;
     }
   }catch(e){
-    btn.disabled = false; if (!prepared || prepared.ver !== editVer) btn.textContent = '메일로 보내기';
+    btn.disabled = false; if (!prepared || prepared.ver !== editVer) btn.textContent = '공유';
     if (e && e.name === 'AbortError') { setMsg('보내기를 취소했습니다.'); return; }
     if (e && (e.code === 'noshare' || e.name === 'NotAllowedError' || e.name === 'TypeError')){
       if (downloads){ setMsg('저장 창을 엽니다. 창에서 ‘메일’을 고르거나, 저장 후 메일 앱에서 첨부하세요.'); setTimeout(() => $('#saveBtn').click(), 0); }
@@ -547,7 +561,7 @@ $('#mailBtn').addEventListener('click', async () => {
         // 공유창을 지원하지 않는 브라우저: 파일을 내려받고 위치 안내
         const files = (prepared && prepared.files) || await prepareFiles();
         plainDownload(await makeBundle(files[0], files.slice(1))); markSaved();
-        setMsg(`이 브라우저는 공유창을 지원하지 않아 파일을 내려받았습니다. ${WHERE}에서 확인 후 메일에 첨부하세요. 사파리·크롬으로 열면 바로 메일 보내기가 됩니다.`, true);
+        setMsg(`이 브라우저는 공유 창을 지원하지 않아 ${WHERE}에 저장했습니다. 사파리에서 기관 웹메일에 들어가 새 메일 → 파일 첨부 → 「파일 앱 › 다운로드」에서 이 파일을 고르세요.`, true);
       }
       return;
     }
@@ -559,7 +573,14 @@ if (/NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp/i.test(nav
   setMsgAll('지금은 다른 앱 안의 브라우저입니다. 메뉴(⋯)에서 ‘다른 브라우저로 열기’(사파리·크롬)를 누르면 메일 보내기가 됩니다.', true);
 }
 
-function markSaved(){ if (state){ state.savedAt = new Date().toISOString(); persist(); } }
+function markSaved(){ if (state){ state.savedAt = new Date().toISOString(); persist(); } showCopyTo(); }
+// 저장·공유 뒤 「받는 주소 복사」 (설정에 보고서 받을 메일 주소를 넣은 경우. 첨부는 메일 앱에서 직접)
+function showCopyTo(){
+  const b = $('#copyToBtn'), to = app.settings.reportTo;
+  b.hidden = !to; if (!to) return;
+  b.textContent = `받는 주소 복사 (${to})`;
+  b.onclick = async () => { try{ await navigator.clipboard.writeText(to); b.textContent = '복사했습니다 · 메일 받는 사람 칸에 붙여 넣으세요'; }catch(e){ b.textContent = to; } };
+}
 
 // 이 시설물 보고서만 비우기 (목록의 다른 시설물은 그대로, 엑셀에서 온 기본정보는 다시 채움)
 $('#resetBtn').addEventListener('click', async () => {
@@ -572,36 +593,80 @@ $('#resetBtn').addEventListener('click', async () => {
 });
 
 /* ---------- 대상 목록 화면 ---------- */
+// 대상목록은 기관 메일로 받은 암호화 파일(.sajin)로만 들어온다. 외부 서버에서 받거나 보내지 않는다.
 const localKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const LC = window.SajinListCrypto;
+const CRYPTO = window.SAJIN_CRYPTO || {salts:[]};      // 빌드할 때 data/crypto.json(솔트, 비밀 아님)을 내장
+const T = () => app.team || (app.team = {lists:{}, myName:'', nameAsked:false, chosen:{}});
+const listIds = () => Object.keys(T().lists);
+// 보는 팀: 내 이름(공백 무시)이 출장자 명단에 있는 목록, 없으면 직접 고른 목록
+function visibleLists(){
+  const L = T().lists, me = LC.normName(T().myName);
+  const byName = me ? listIds().filter(id => (L[id].members || []).includes(me)) : [];
+  return byName.length ? byName : listIds().filter(id => T().chosen[id]);
+}
+const shortBatch = s => { const m = /(\d+)\s*년\s*(\d+)\s*차/.exec(s || ''); return m ? `${m[1]}년 ${m[2]}차` : (s || ''); };
+const dateRange = ds => { const a = (ds || []).map(k => IMP.dayLabel(k).replace(/ \(.\)$/, '')); return a.length > 1 ? `${a[0]}~${a[a.length-1]}` : (a[0] || ''); };
+const listTitle = L => `${L.teamName} · ${shortBatch(L.batchName)}`;
+
 function renderList(){
-  const n = app.sites.length;
-  $('#hdrSub').textContent = app.batch ? app.batch.name : '대상 목록';
-  $('#batchName').textContent = app.batch ? app.batch.name : (n ? '작성 중인 보고서' : '대상 목록');
-  $('#batchCount').textContent = n ? `· ${n}개 시설` : '';
-  $('#shareListBtn').hidden = !app.sites.some(s => s.src);
-  $('#clearListBtn').hidden = !n;
+  const blocking = renderTeamCards(), vis = blocking ? [] : visibleLists(), ids = listIds(), L = T().lists;
+  const shown = app.sites.filter(s => !s.listId || vis.includes(s.listId));
+  const others = blocking ? [] : app.sites.filter(s => s.listId && !vis.includes(s.listId));
+  if (vis.length){
+    const t = vis.map(id => L[id]);
+    $('#hdrSub').textContent = shortBatch(t[0].batchName) || '대상 목록';
+    $('#batchName').textContent = t.map(x => x.teamName).join(' · ');
+    $('#batchCount').textContent = `· ${shortBatch(t[0].batchName)} · ${shown.length}곳`;
+  } else {
+    $('#hdrSub').textContent = app.batch ? app.batch.name : '대상 목록';
+    $('#batchName').textContent = app.batch ? app.batch.name : (shown.length ? '작성 중인 보고서' : '대상 목록');
+    $('#batchCount').textContent = shown.length ? `· ${shown.length}개 시설` : '';
+  }
+  const li = $('#listInfo'); li.innerHTML = ''; li.hidden = !vis.length;
+  vis.forEach(id => { const b = btn('linkbtn', `이 목록 지우기 (${L[id].teamName})`, () => removeList(id)); li.appendChild(b); });
+  $('#clearListBtn').hidden = !app.sites.length;
   const box = $('#siteList'); box.innerHTML = '';
-  if (!n){
+  const ot = $('#otherTeams'); ot.innerHTML = '';
+  // 여러 팀을 볼 때는 팀 이름, 엑셀을 직접 불러온 목록은 「이 휴대폰에서만」, 지시서 2 방식으로 받은 목록은 「이전 방식으로 받은 목록」
+  const tagOf = s => s.listId ? (vis.length > 1 ? L[s.listId].teamName : '')
+    : s.slot != null ? '이전 방식으로 받은 목록' : (s.src && ids.length ? '이 휴대폰에서만' : '');
+  if (!shown.length && !others.length && !blocking){
     const e = el('div', 'block empty');
-    e.append(el('b', null, '등록된 시설물이 없습니다'),
-      el('p', null, '출장 전에 사실관계조사 대상목록 엑셀을 불러오면 시설물마다 기본정보가 채워진 보고서가 만들어집니다. 엑셀 없이 쓰려면 「직접 입력해서 시작」을 누르세요.'));
+    e.append(el('b', null, '등록된 대상 목록이 없습니다'),
+      el('p', null, '팀장 PC 화면이나 인쇄물의 QR을 위의 「QR 찍기」로 찍거나, 기관 메일로 받은 첨부파일을 「목록 파일 불러오기」로 여세요.'));
+    const ol = el('ol', 'steps');
+    ['사파리로 기관 웹메일에 들어가 첨부파일(대상목록_….sajin) 내려받기 (파일 앱 › 다운로드에 저장됨)', '이 화면의 「목록 파일 불러오기」 → 저장한 파일 선택', '처음 한 번만 팀 비밀번호와 내 이름 입력 → 우리 팀 목록'].forEach(t => ol.appendChild(el('li', null, t)));
+    e.append(ol, el('p', null, '목록 없이 쓰려면 「직접 입력해서 시작」을 누르세요.'));
     box.appendChild(e); return;
   }
-  IMP.groupByDate(app.sites, localKey(new Date())).forEach(g => {
+  IMP.groupByDate(shown, localKey(new Date())).forEach(g => {
     const h = el('h2', 'day', g.label); h.appendChild(el('span', null, ` ${g.sites.length}곳`));
     if (g.today) h.appendChild(el('em', 'today', '오늘'));
     box.appendChild(h);
-    g.sites.forEach(s => box.appendChild(siteCard(s)));
+    g.sites.forEach(s => box.appendChild(siteCard(s, tagOf(s))));
   });
+  if (others.length){
+    const d = el('details', 'others'), lists = [...new Set(others.map(s => s.listId))];
+    d.appendChild(el('summary', null, `다른 팀 보기 (${lists.length}팀)`));
+    lists.forEach(id => {
+      const h = el('h3', 'day', L[id].teamName);
+      h.append(el('span', null, ` ${shortBatch(L[id].batchName)} · ${dateRange(L[id].dates)}`), btn('linkbtn', '이 목록 지우기', () => removeList(id)));
+      d.appendChild(h);
+      others.filter(s => s.listId === id).sort((a, b) => (a.no || 0) - (b.no || 0)).forEach(s => d.appendChild(siteCard(s)));
+    });
+    ot.appendChild(d);
+  }
 }
-function siteCard(s){
+function siteCard(s, team){
   const m = s.meta, card = el('article', 'block site' + (s.removed ? ' removed' : ''));
   const open = el('button', 'site-open'); open.type = 'button';
   const l1 = el('div', 'st1');
   l1.append(el('span', 'no', s.no || '·'), el('b', 'nm', m.facility || '(시설물명 없음)'));
   const sg = s.src ? s.src.safetyGrade : '';
   const tags = el('span', 'tags');
+  if (team) tags.appendChild(el('span', 'tag team', team));
   if (m.grade) tags.appendChild(el('span', 'tag', m.grade));
   if (sg) tags.appendChild(el('span', 'tag' + (/^[DE]/i.test(sg) ? ' alert' : ''), sg));
   l1.appendChild(tags);
@@ -622,7 +687,7 @@ function siteCard(s){
     const a = el('a', 'btn sm', '지도'); a.href = 'https://map.naver.com/p/search/' + encodeURIComponent(m.location);
     a.target = '_blank'; a.rel = 'noopener noreferrer'; acts.appendChild(a);
   }
-  if (s.removed || !s.src){
+  if (s.removed || !s.src || s.slot != null){
     const d = el('button', 'btn sm dangertxt', '삭제'); d.type = 'button';
     d.addEventListener('click', () => removeSite(s)); acts.appendChild(d);
   }
@@ -636,9 +701,25 @@ function removeSite(s){
   sitePhotoIds(s).forEach(delPhoto);
   app.sites = app.sites.filter(x => x !== s); persist(); renderList();
 }
+// 목록 하나 지우기 (사진이 있으면 한 번 더 확인)
+function removeList(id){
+  const L = T().lists[id]; if (!L) return;
+  const ss = app.sites.filter(s => s.listId === id), pc = ss.reduce((a, s) => a + photoCount(s), 0);
+  if (!confirm(`「${listTitle(L)}」 목록(${ss.length}곳)을 이 휴대폰에서 지울까요?`)) return;
+  if (pc && !confirm(`사진이 있는 시설물 ${ss.filter(s => photoCount(s)).length}곳(사진 ${pc}장)도 함께 지워집니다. 보고서를 보냈는지 확인하셨나요?`)) return;
+  ss.forEach(s => sitePhotoIds(s).forEach(delPhoto));
+  app.sites = app.sites.filter(s => s.listId !== id); delete T().lists[id]; delete T().chosen[id];
+  persist(); renderList(); setMsg(`「${listTitle(L)}」 목록을 지웠습니다.`);
+}
 async function wipeAll(){
   await tx('photos','readwrite', s => s.clear());
-  app.sites = []; app.batch = null; app.activeId = null;
+  app.sites = []; app.batch = null; app.activeId = null; T().lists = {}; T().chosen = {};
+  await persistNow();
+}
+// 엑셀을 직접 불러온 시설물만 지우기 (메일로 받은 목록은 그대로)
+async function wipeLocal(){
+  app.sites.filter(s => !s.listId).forEach(s => sitePhotoIds(s).forEach(delPhoto));
+  app.sites = app.sites.filter(s => s.listId); app.batch = null;
   await persistNow();
 }
 $('#clearListBtn').addEventListener('click', async () => {
@@ -651,39 +732,314 @@ $('#manualBtn').addEventListener('click', () => {
   app.sites.push(s); openSite(s.id);
 });
 
-/* ---------- 엑셀·목록 파일·공유 링크로 등록 ---------- */
-$('#xlsBtn').addEventListener('click', () => { const fi = $('#xlsIn'); fi.value = ''; fi.click(); });
-$('#xlsIn').addEventListener('change', async e => {
+/* ---------- 목록 파일 불러오기: .sajin(암호화 목록) · .xlsx(비상용) · 예전 .json ---------- */
+// 아이폰 파일 선택 창에서 .sajin 이 흐리게 막히지 않도록 accept 를 지정하지 않고 내용으로 판별
+$('#listFileBtn').addEventListener('click', () => { const fi = $('#listIn'); fi.value = ''; fi.click(); });
+$('#listIn').addEventListener('change', async e => {
   const f = e.target.files[0]; if (!f) return;
-  try{
+  try{ await openListFile(f); }catch(err){ setMsg(err.message || '파일을 열지 못했습니다.', true); }
+});
+async function openListFile(f){
+  const buf = new Uint8Array(await f.arrayBuffer());
+  if (buf[0] === 0x50 && buf[1] === 0x4B){              // zip = 엑셀(.xlsx)
     if (!window.JSZip) throw new Error('엑셀을 여는 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.');
-    if (!/\.xlsx$/i.test(f.name)) throw new Error('.xlsx 파일만 불러올 수 있습니다. 엑셀에서 「다른 이름으로 저장 › Excel 통합 문서(.xlsx)」로 저장해 주세요.');
-    const {sheets} = await SajinXlsx.readXlsx(await f.arrayBuffer(), JSZip);
-    showPreview(IMP.parseWorkbook(sheets), '엑셀');
-  }catch(err){ setMsg(err.message || '엑셀을 읽지 못했습니다.', true); }
-});
-$('#jsonBtn').addEventListener('click', () => { const fi = $('#jsonIn'); fi.value = ''; fi.click(); });
-$('#jsonIn').addEventListener('change', async e => {
-  const f = e.target.files[0]; if (!f) return;
-  try{
-    let o; try{ o = JSON.parse(await f.text()); }catch(x){ throw new Error('목록 파일(.json)이 아니거나 손상되었습니다.'); }
-    showPreview(Object.assign(IMP.unpackList(o), {warnings:[]}), '목록 파일');
-  }catch(err){ setMsg(err.message, true); }
-});
-function clearHash(){ if (/^#list=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search); }
-async function checkHash(){
-  const m = /^#list=(.+)$/.exec(location.hash); if (!m) return;
-  if (!listShown) showList();
-  if (!window.JSZip){ setMsg('목록을 여는 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.', true); return; }
-  try{ showPreview(Object.assign(await IMP.decodeShare(m[1], JSZip), {warnings:[]}), '공유 링크'); }
-  catch(err){ clearHash(); setMsg(err.message, true); }
+    let sheets;
+    try{ sheets = (await SajinXlsx.readXlsx(buf, JSZip)).sheets; }catch(e){ throw new Error('대상목록 파일이 아닙니다. 팀장에게 받은 메일의 첨부파일(.sajin)을 고르세요.'); }
+    showPreview(IMP.parseWorkbook(sheets), '엑셀'); return;
+  }
+  let o = null;
+  if (buf.length < 2000000){ try{ o = JSON.parse(new TextDecoder().decode(buf).replace(/^﻿/, '')); }catch(e){} }
+  if (o && o.type === 'sajin-list') return openSajin(o);
+  if (o && o.v === 1 && Array.isArray(o.r)) return showPreview(Object.assign(IMP.unpackList(o), {warnings:[]}), '목록 파일');
+  throw new Error('대상목록 파일이 아닙니다. 팀장에게 받은 메일의 첨부파일(.sajin)을 고르세요.');
 }
-window.addEventListener('hashchange', checkHash);
+
+// 팀 비밀번호 키: 비밀번호는 저장하지 않고, 솔트별로 꺼낼 수 없는 키(CryptoKey)만 IndexedDB 'listKeys'에 둔다
+let keys = null, keyState = '', pendingFile = null, fails = 0, lockUntil = 0;
+const saveKeys = () => tx('kv','readwrite', s => s.put(keys, 'listKeys'));
+async function loadKeys(){
+  if (keys) return keys;
+  try{ keys = (await getKV(await idb(), 'listKeys')) || {}; }catch(e){ keys = {}; }
+  // 새 솔트 키를 받은 지 2주가 지나면 이전 솔트 키는 지움
+  const cur = LC.currentSalt(CRYPTO);
+  if (cur && keys[cur.id] && Date.now() - keys[cur.id].addedAt > 14 * 864e5){
+    const old = Object.keys(keys).filter(id => id !== cur.id);
+    if (old.length){ old.forEach(id => delete keys[id]); saveKeys(); }
+  }
+  return keys;
+}
+async function openSajin(file){
+  if (!LC.isEncFile(file)) throw new Error('대상목록 파일이 손상되었습니다. 팀장에게 다시 받아 주세요.');
+  const salt = LC.saltById(CRYPTO, file.kdf && file.kdf.saltId);
+  if (!salt) throw new Error('이 목록 파일은 더 새로운 앱에서 만들어졌습니다. 앱을 새로고침해 최신 버전으로 바꾼 뒤 다시 불러오세요.');
+  await loadKeys();
+  const k = keys[salt.id];
+  if (k && await LC.checkKey(k.key, file)) return applyListFile(k.key, file);
+  pendingFile = file; keyState = (k || Object.keys(keys).length) ? 'changed' : 'need';
+  renderList(); window.scrollTo(0, 0);
+  const pi = $('#passIn'); if (pi) pi.focus();
+}
+async function submitPass(pw, out, b){
+  if (Date.now() < lockUntil){ out.textContent = `잠시 후 다시 입력하세요 (${Math.ceil((lockUntil - Date.now()) / 1000)}초)`; return; }
+  const file = pendingFile; if (!file) return;
+  const salt = LC.saltById(CRYPTO, file.kdf.saltId);
+  b.disabled = true; b.textContent = '확인 중…'; out.textContent = '';
+  try{
+    const key = await LC.deriveKey(pw, salt.salt, CRYPTO.iter);
+    if (!(await keyOk(key, file))){
+      if (++fails >= 5){ fails = 0; lockUntil = Date.now() + 30000; out.textContent = '비밀번호가 5번 틀렸습니다. 30초 뒤에 다시 입력하세요.'; }
+      else out.textContent = file.qr ? QR_BAD : '비밀번호가 맞지 않습니다.';
+      return;
+    }
+    fails = 0; keys[salt.id] = {key, addedAt:Date.now()}; await saveKeys();
+    pendingFile = null; keyState = '';
+    await applyListFile(key, file);
+  }catch(e){ out.textContent = e.message || '확인하지 못했습니다.'; }
+  finally{ b.disabled = false; b.textContent = '확인'; }
+}
+// 목록 반영: 같은 listId 새 판은 지시서 1 다시 불러오기 규칙(사진·직접 고친 값 보존), 옛 판은 무시
+// file: 목록 파일(.sajin) 또는 QR 로 받은 묶음 {qr:{saltId, iv, ct}, kdf:{saltId}}
+const keyOk = (key, file) => file.qr ? QR.check(key, file.qr) : LC.checkKey(key, file);
+async function applyListFile(key, file){
+  const c = file.qr ? await QR.decrypt(key, file.qr) : await LC.decryptList(key, file);
+  if (!c || !c.listId || !Array.isArray(c.sites)) throw new Error('대상목록 파일 내용이 올바르지 않습니다.');
+  const id = String(c.listId).slice(0, 64), prev = T().lists[id];
+  const vs = LC.versionState(prev && prev.listVersion, c.listVersion);
+  if (vs === 'old'){ renderList(); setMsg(`이미 더 최신 목록이 있습니다 (${listTitle(prev)}). 이 ${file.qr ? 'QR' : '파일'}은 불러오지 않았습니다.`, true); return; }
+  if (vs === 'same'){ renderList(); setMsg(`${file.qr ? '이미 등록된 목록입니다' : '이미 불러온 목록입니다'} (${listTitle(prev)}, 바뀐 내용 없음).`); return; }
+  const team = c.team || {}, batch = c.batch || {}, rows = IMP.cleanRows(c.sites);
+  const teamName = String(team.name || '팀').slice(0, 60), legacy = app.legacySlots || {};
+  const own = app.sites.filter(s => s.listId === id);
+  // 이 휴대폰에서 직접 불러온 엑셀, 이전 방식(지시서 2)으로 받은 같은 팀 목록의 같은 시설물은 하나로 합침
+  const cand = own.concat(app.sites.filter(s => !s.listId && s.src && (s.slot == null || !legacy[s.slot] || legacy[s.slot] === teamName)));
+  const r = IMP.mergeSites(cand, rows, {sameBatch:false, settings:app.settings, makeSite: row => Object.assign(newSite(row), {listId:id})});
+  r.matched.forEach(s => { s.listId = id; delete s.slot; });
+  own.forEach(s => { if (!r.matched.includes(s)){ s.removed = true; r.missing++; } });
+  app.sites = app.sites.filter(s => !cand.includes(s)).concat(r.sites);
+  T().lists[id] = {listVersion:String(c.listVersion), teamName, members:(team.members || []).map(LC.normName),
+    batchId:String(batch.id || ''), batchName:String(batch.name || ''), dates:(batch.dates || []).slice(0, 31), count:rows.length, importedAt:new Date().toISOString()};
+  await persistNow(); renderList();
+  const t = listTitle(T().lists[id]);
+  const hidden = T().nameAsked && !visibleLists().includes(id) ? ' 내 팀 목록이 아니어서 「다른 팀 보기」에 넣었습니다.' : '';
+  setMsg((prev ? `${t} 목록을 갱신했습니다: 갱신 ${r.updated}곳, 추가 ${r.added}곳${r.missing ? `, 목록에서 빠짐 ${r.missing}곳(사진 보호를 위해 지우지 않음)` : ''}.`
+    : `${t} · ${rows.length}곳을 등록했습니다.`) + hidden);
+}
+function card(title, sub){ const c = el('section', 'block keycard'); c.appendChild(el('b', null, title)); if (sub) c.appendChild(el('p', 'sub', sub)); return c; }
+function keyCard(){
+  const c = keyState === 'qrbad' ? card('팀 비밀번호를 다시 입력하세요', QR_BAD)
+    : keyState === 'changed'
+    ? card('팀 비밀번호가 바뀌었습니다', '새 팀 비밀번호를 입력하세요. 휴대폰의 사진·작성 내용은 그대로 있습니다.')
+    : card('팀 비밀번호를 입력하세요', '처음 한 번만 입력하면 됩니다. 비밀번호는 팀장에게 구두나 내부 메신저로 받으세요.');
+  const i = document.createElement('input'); i.type = 'password'; i.id = 'passIn'; i.autocomplete = 'current-password'; i.setAttribute('aria-label', '팀 비밀번호');
+  const out = el('p', 'msg err'); out.setAttribute('role', 'alert');
+  const b = btn('btn primary', '확인', () => submitPass(i.value, out, b));
+  i.addEventListener('keydown', e => { if (e.key === 'Enter') b.click(); });
+  const row = el('div', 'row inrow'); row.append(i, b);
+  c.append(row, out, btn('linkbtn', '취소', () => { pendingFile = null; keyState = ''; renderList(); }));
+  return c;
+}
+function nameCard(){
+  const c = card('내 이름 (선택)', '엑셀 출장자 열의 이름과 같으면 우리 팀 목록만 자동으로 보입니다. 이름은 이 휴대폰에만 저장됩니다.');
+  const i = document.createElement('input'); i.type = 'text'; i.id = 'nameIn'; i.value = T().myName || ''; i.placeholder = '예) 홍길동'; i.setAttribute('aria-label', '내 이름');
+  const done = name => { T().myName = name; T().nameAsked = true; persist(); renderList(); };
+  const row = el('div', 'row'); row.append(btn('btn', '건너뛰기', () => done('')), btn('btn primary', '확인', () => done(i.value.trim())));
+  i.addEventListener('keydown', e => { if (e.key === 'Enter') done(i.value.trim()); });
+  c.append(i, row); return c;
+}
+function teamPicker(){
+  const c = card('어느 팀 목록을 볼까요?', T().myName
+    ? `「${T().myName}」 이름이 들어 있는 목록이 없습니다. 볼 팀을 고르세요 (여러 팀 선택 가능).` : '볼 팀을 고르세요 (여러 팀 선택 가능).');
+  const picks = new Set();
+  listIds().forEach(id => {
+    const s = T().lists[id], l = el('label', 'pick'), x = document.createElement('input'); x.type = 'checkbox';
+    x.addEventListener('change', () => { if (x.checked) picks.add(id); else picks.delete(id); });
+    const t = el('span'); t.append(el('b', null, s.teamName), el('span', 'sub', ` ${shortBatch(s.batchName)} · ${dateRange(s.dates)} · ${s.count}곳`));
+    l.append(x, t); c.appendChild(l);
+  });
+  c.appendChild(btn('btn primary', '선택한 팀 목록 보기', () => {
+    if (!picks.size) return;
+    picks.forEach(id => { T().chosen[id] = T().lists[id].batchId || '-'; }); persist(); renderList();
+  }));
+  return c;
+}
+// 비밀번호·이름·팀 선택 카드. 이름·팀 선택 중이면 true (목록 대신 카드를 보여줌)
+function renderTeamCards(){
+  const box = $('#remoteBox'); box.innerHTML = '';
+  if (qrHold) box.appendChild(otherBrowserCard());
+  qrPending().forEach(([bid, b]) => box.appendChild(qrProgCard(bid, b)));
+  if (pendingFile) box.appendChild(keyCard());
+  if (!listIds().length) return false;
+  if (!T().nameAsked){ box.appendChild(nameCard()); return true; }
+  if (!visibleLists().length){ box.appendChild(teamPicker()); return true; }
+  return false;
+}
+
+// 설정(⋯): 이름·팀·비밀번호, 보고서 받을 메일 주소, 불러온 목록 지우기
+$('#setBtn').addEventListener('click', () => {
+  const sh = $('#sheet'); sh.innerHTML = '';
+  sh.appendChild(el('h3', 'ptitle', '설정'));
+  const close = fn => async () => { dlg.close(); await fn(); };
+  sh.appendChild(el('p', 'sub', `내 이름: ${T().myName || '(입력 안 함)'} · 보는 팀: ${visibleLists().map(id => T().lists[id].teamName).join(', ') || '없음'}`));
+  const row = el('div', 'row');
+  row.append(btn('btn', '내 이름 바꾸기', close(() => { T().nameAsked = false; persist(); renderList(); })),
+    btn('btn', '팀 다시 고르기', close(() => { T().chosen = {}; T().myName = ''; T().nameAsked = false; persist(); renderList(); })));
+  sh.appendChild(row);
+  const ml = el('label', 'f', '보고서 받을 메일 주소 (선택, 이 휴대폰에만 저장)');
+  const mi = document.createElement('input'); mi.type = 'email'; mi.id = 'reportToIn'; mi.value = app.settings.reportTo || ''; mi.placeholder = '예) 담당자 기관 메일 주소';
+  mi.addEventListener('input', () => { app.settings.reportTo = mi.value.trim(); persist(); });
+  ml.appendChild(mi); sh.appendChild(ml);
+  if (listIds().length){
+    sh.appendChild(el('b', null, '불러온 목록'));
+    listIds().forEach(id => {
+      const L = T().lists[id], r = el('div', 'lrow');
+      r.append(el('span', null, `${listTitle(L)} · ${L.count}곳`), btn('btn sm dangertxt', '지우기', close(() => removeList(id))));
+      sh.appendChild(r);
+    });
+  }
+  sh.appendChild(btn('btn', '팀 비밀번호 다시 입력', close(async () => {
+    keys = {}; await saveKeys(); setMsg('저장된 팀 비밀번호 키를 지웠습니다. 다음에 목록 파일을 불러올 때 비밀번호를 묻습니다.');
+  })));
+  sh.appendChild(btn('btn dangertxt', '이 휴대폰에서 대상 목록·키 모두 지우기', close(async () => {
+    const rs = app.sites.filter(s => s.listId || s.slot != null), pc = rs.reduce((a, s) => a + photoCount(s), 0);
+    if (!confirm(`팀 비밀번호 키와 메일로 받은 목록의 시설물 ${rs.length}곳${pc ? `(사진 ${pc}장 포함)` : ''}을 이 휴대폰에서 지울까요?`)) return;
+    rs.forEach(s => sitePhotoIds(s).forEach(delPhoto));
+    app.sites = app.sites.filter(s => !s.listId && s.slot == null); app.team = null; app.legacySlots = null;
+    keys = {}; await saveKeys(); pendingFile = null; keyState = '';
+    await persistNow(); renderList(); setMsg('대상 목록과 키를 지웠습니다.');
+  })));
+  sh.appendChild(btn('btn', '닫기', () => dlg.close()));
+  dlg.oncancel = null; dlg.onclose = null;
+  dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
+  if (!dlg.open) dlg.showModal();
+});
+
+// 예전 평문 공유 링크(#list=)는 더 이상 받지 않음 (시설 정보가 주소에 그대로 들어가므로)
+function clearHash(){ if (/^#list=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search); }
+function checkHash(){
+  if (!/^#list=/.test(location.hash)) return;
+  clearHash();
+  if (!listShown) showList();
+  setMsg('목록 공유 링크는 더 이상 지원하지 않는 방식입니다. 팀장에게 목록 파일(.sajin)을 기관 메일로 받아 「목록 파일 불러오기」를 눌러 주세요.', true);
+}
+window.addEventListener('hashchange', () => {
+  if (/^#q=/.test(location.hash) && !adminMode){ const h = location.hash; history.replaceState(null, '', location.pathname + location.search); receiveQr(h, false); return; }
+  if ((location.hash === '#admin') !== adminMode) location.reload(); else checkHash();
+});
+
+/* ---------- QR 로 목록 받기: 카메라 앱으로 찍어 열린 주소(#q=) · 앱 안 「QR 찍기」 (src/qrcodec.js) ---------- */
+// 받다 만 조각은 IndexedDB 'qrParts' {묶음 식별값: {n, parts:{번호:데이터}, at}} 에 두고 24시간 뒤 지운다. 다 모이면 풀어서 등록
+const QR = window.SajinQR, QR_TTL = 24 * 36e5;
+const QR_BAD = '팀 비밀번호가 맞지 않거나 QR이 손상되었습니다. 비밀번호를 다시 입력하거나 QR을 다시 찍어 주세요.';
+let qrBundles = {}, qrHold = null, qrHere = false;
+const saveQrParts = () => tx('kv','readwrite', s => s.put(qrBundles, 'qrParts'));
+async function loadQrParts(){
+  try{ qrBundles = (await getKV(await idb(), 'qrParts')) || {}; }catch(e){ qrBundles = {}; }
+  const old = Object.keys(qrBundles).filter(b => !(Date.now() - qrBundles[b].at < QR_TTL));
+  if (old.length){ old.forEach(b => delete qrBundles[b]); saveQrParts(); }
+}
+const qrPending = () => Object.entries(qrBundles).filter(([, b]) => Date.now() - b.at < QR_TTL && !QR.isComplete(b));
+const qrProgText = b => `목록 QR ${QR.received(b).length} / ${b.n} 받음 — 나머지 QR을 찍어 주세요`;
+// 기본 카메라가 평소와 다른 브라우저(삼성 인터넷 등)로 열었을 수 있을 때: 이 브라우저에 자료가 하나도 없으면 먼저 안내
+const ODD_BROWSER = /SamsungBrowser|Whale|EdgA|EdgiOS|FxiOS|Firefox|OPR\/|OPT\//i.test(navigator.userAgent);
+async function receiveQr(text, scanned){
+  const p = QR.parsePart(text);
+  if (!p){ if (!listShown) showList(); setMsg('이 앱용 QR이 아닙니다.', true); return null; }
+  if (!scanned && !qrHere && ODD_BROWSER && !app.sites.length && !Object.keys(await loadKeys()).length){
+    qrHold = p; if (!listShown) showList(); renderList(); window.scrollTo(0, 0); return null;
+  }
+  const b = qrBundles[p.bid] || (qrBundles[p.bid] = {n:p.n, parts:{}, at:Date.now()});
+  const done = QR.addPart(b, p);
+  if (!done){ await saveQrParts(); if (!listShown) showList(); renderList(); setMsg(qrProgText(b)); return b; }
+  delete qrBundles[p.bid]; await saveQrParts();
+  if (!listShown) showList();
+  try{ await openQR(QR.join(b)); }catch(e){ renderList(); setMsg(e.message || 'QR을 읽지 못했습니다.', true); }
+  return b;
+}
+async function openQR(payload){
+  const salt = LC.saltById(CRYPTO, payload.saltId);
+  if (!salt) throw new Error('이 QR은 더 새로운 앱에서 만들어졌습니다. 앱을 새로고침해 최신 버전으로 바꾼 뒤 다시 찍어 주세요.');
+  await loadKeys();
+  const file = {qr:payload, kdf:{saltId:salt.id}}, k = keys[salt.id];
+  if (k && await QR.check(k.key, payload)) return applyListFile(k.key, file);
+  pendingFile = file; keyState = k ? 'qrbad' : Object.keys(keys).length ? 'changed' : 'need';
+  renderList(); window.scrollTo(0, 0);
+  const pi = $('#passIn'); if (pi) pi.focus();
+}
+function qrProgCard(bid, b){
+  const c = card(qrProgText(b), '여러 장이면 순서 상관없이 모두 찍으세요. 받다 만 QR은 24시간 뒤 지워집니다.'); c.classList.add('qrprog');
+  const chips = el('div', 'chips'), got = QR.received(b);
+  for (let i = 1; i <= b.n; i++) chips.appendChild(el('span', got.includes(i) ? 'got' : '', `${i}번${got.includes(i) ? ' 받음' : ''}`));
+  const row = el('div', 'row');
+  row.append(btn('btn primary', 'QR 찍기', openScanner), btn('btn', '그만 받기', () => { delete qrBundles[bid]; saveQrParts(); renderList(); setMsg(''); }));
+  c.append(chips, row); return c;
+}
+function otherBrowserCard(){
+  const c = card('평소 쓰는 브라우저인가요?', '평소 쓰는 브라우저가 아니면 목록이 따로 저장됩니다. 평소 쓰는 브라우저에서 앱을 열고 「QR 찍기」로 찍어 주세요.');
+  const row = el('div', 'row');
+  row.append(btn('btn primary', '여기에 그냥 등록', () => { const p = qrHold; qrHold = null; qrHere = true; receiveQr(`#q=${p.i}.${p.n}.${p.bid}.${p.data}`, false); }),
+    btn('btn', '취소', () => { qrHold = null; renderList(); }));
+  c.appendChild(row); return c;
+}
+// 앱 안 QR 찍기: 후면 카메라 → BarcodeDetector(있으면) 또는 jsQR. 여러 장이면 카메라를 켠 채로 계속, 다 모이면 닫고 등록
+let scanStop = null;
+async function openScanner(){
+  const sh = $('#sheet'); sh.innerHTML = '';
+  sh.appendChild(el('h3', 'ptitle', 'QR 찍기'));
+  const v = document.createElement('video'); v.setAttribute('playsinline', ''); v.muted = true; v.autoplay = true;
+  const st = el('p', 'msg'); st.id = 'scanMsg'; st.setAttribute('role', 'status'); st.textContent = '카메라를 켜는 중…';
+  const w = el('div', 'scan');
+  w.append(v, st, el('p', 'sub', '팀장 PC 화면이나 인쇄물의 QR을 비추세요. 여러 장이면 순서 상관없이 차례로 비추세요.'), btn('btn', '닫기', () => dlg.close()));
+  sh.appendChild(w);
+  dlg.oncancel = null; dlg.onclick = null;
+  dlg.onclose = () => { if (scanStop) scanStop(); };
+  if (!dlg.open) dlg.showModal();
+  let stream;
+  try{
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no camera');
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+  }catch(e){ st.className = 'msg err'; st.textContent = '카메라를 쓸 수 없습니다. 설정에서 카메라 권한을 허용하거나, 기본 카메라 앱으로 QR을 찍어 주세요.'; return; }
+  if (!dlg.open){ stream.getTracks().forEach(t => t.stop()); return; }
+  let alive = true, last = '', det = null;
+  scanStop = () => { alive = false; stream.getTracks().forEach(t => t.stop()); scanStop = null; };
+  v.srcObject = stream; v.play().catch(() => {});
+  try{ if ('BarcodeDetector' in window && (await BarcodeDetector.getSupportedFormats()).includes('qr_code')) det = new BarcodeDetector({formats:['qr_code']}); }catch(e){ det = null; }
+  st.textContent = 'QR을 비추세요';
+  const cv = document.createElement('canvas'), cx = cv.getContext('2d', {willReadFrequently:true});
+  const tick = async () => {
+    if (!alive) return;
+    let text = null;
+    if (v.readyState >= 2 && v.videoWidth){
+      try{
+        if (det){ const r = await det.detect(v); if (r[0]) text = r[0].rawValue; }
+        else {
+          const cw = Math.min(v.videoWidth, 960), ch = Math.round(v.videoHeight * cw / v.videoWidth);
+          cv.width = cw; cv.height = ch; cx.drawImage(v, 0, 0, cw, ch);
+          const r = window.jsQR(cx.getImageData(0, 0, cw, ch).data, cw, ch, {inversionAttempts:'dontInvert'});
+          if (r) text = r.data;
+        }
+      }catch(e){ det = null; }
+    }
+    if (text && text !== last){
+      last = text;
+      const p = QR.parsePart(text);
+      if (!p){ st.className = 'msg err'; st.textContent = '이 앱용 QR이 아닙니다.'; }
+      else {
+        const had = (qrBundles[p.bid] || {}).parts;
+        if (QR.isComplete({n:p.n, parts:Object.assign({}, had, {[p.i]:p.data})})){ dlg.close(); await receiveQr(text, true); return; }
+        const b = await receiveQr(text, true);
+        st.className = 'msg'; st.textContent = `${qrProgText(b)} (받은 번호: ${QR.received(b).join(', ')})`;
+      }
+    }
+    if (alive) setTimeout(tick, 150);
+  };
+  tick();
+}
+$('#qrBtn').addEventListener('click', openScanner);
 
 function showPreview(data, from){
   const sh = $('#sheet'); sh.innerHTML = '';
   sh.appendChild(el('h3', 'ptitle', `${data.name || '대상 목록'} · ${data.rows.length}개 시설`));
-  sh.appendChild(el('p', 'sub', `${from}에서 읽은 목록입니다. 내용을 확인하고 「등록」을 누르세요.`));
+  sh.appendChild(el('p', 'sub', `${from}에서 읽은 목록입니다 (이 휴대폰에서만 쓰는 비상용). 내용을 확인하고 「등록」을 누르세요.`));
   const ul = el('ul', 'plist');
   data.rows.forEach(r => {
     const li = el('li'); li.append(el('span', 'no', r.no), el('b', null, r.facility));
@@ -698,11 +1054,12 @@ function showPreview(data, from){
     sh.appendChild(w);
   }
   let mode = 'merge';
-  if (app.sites.length){
+  const local = app.sites.filter(s => !s.listId);
+  if (local.length){
     const same = app.batch && app.batch.name === data.name;
-    const fs = el('fieldset', 'modes'); fs.appendChild(el('legend', null, `이미 등록된 시설물 ${app.sites.length}곳이 있습니다`));
+    const fs = el('fieldset', 'modes'); fs.appendChild(el('legend', null, `이 휴대폰에서 직접 등록한 시설물 ${local.length}곳이 있습니다`));
     [['merge', same ? '바뀐 내용만 반영 (사진·작성 내용 유지, 직접 고친 칸 보호)' : '기존 목록을 유지하고 추가·갱신'],
-     ['replace', '전부 새로 등록 (기존 시설물·사진 삭제)']].forEach(([v, t]) => {
+     ['replace', '전부 새로 등록 (직접 등록한 시설물·사진 삭제, 메일로 받은 목록은 유지)']].forEach(([v, t]) => {
       const l = el('label', 'check'); const r = document.createElement('input'); r.type = 'radio'; r.name = 'mode'; r.value = v; r.checked = v === mode;
       r.addEventListener('change', () => { mode = v; }); l.append(r, document.createTextNode(' ' + t)); fs.appendChild(l);
     });
@@ -712,9 +1069,9 @@ function showPreview(data, from){
   const bNo = btn('btn', '취소', () => { dlg.close(); });
   const bOk = btn('btn primary', '등록', async () => {
     if (mode === 'replace'){
-      const pc = app.sites.reduce((a, s) => a + photoCount(s), 0);
-      if (!confirm(`기존 시설물 ${app.sites.length}곳${pc ? `과 사진 ${pc}장` : ''}을 지우고 새로 등록할까요?`)) return;
-      await wipeAll();
+      const pc = local.reduce((a, s) => a + photoCount(s), 0);
+      if (!confirm(`직접 등록한 시설물 ${local.length}곳${pc ? `과 사진 ${pc}장` : ''}을 지우고 새로 등록할까요?`)) return;
+      await wipeLocal();
     }
     const r = registerRows(data);
     dlg.close(); renderList();
@@ -722,69 +1079,29 @@ function showPreview(data, from){
       : `반영했습니다: 갱신 ${r.updated}곳, 추가 ${r.added}곳${r.missing ? `, 목록에서 빠짐 ${r.missing}곳(사진 보호를 위해 지우지 않음)` : ''}.`);
   });
   acts.append(bNo, bOk); sh.appendChild(acts);
-  dlg.oncancel = null; dlg.onclose = () => { dlg.onclose = null; clearHash(); };
+  dlg.oncancel = null; dlg.onclose = null;
   dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
   if (!dlg.open) dlg.showModal();
 }
 function registerRows(data){
   const sameBatch = !!(app.batch && app.batch.name === data.name);
-  const r = IMP.mergeSites(app.sites, data.rows, {sameBatch, settings:app.settings, makeSite:newSite});
+  const old = app.sites;
+  const r = IMP.mergeSites(old, data.rows, {sameBatch:false, settings:app.settings, makeSite:newSite});
   app.sites = r.sites;
+  // 빠진 시설물 표시는 이 휴대폰에서 직접 불러온 같은 회차에만 (메일로 받은 목록은 그 목록 파일이 관리)
+  if (sameBatch) old.forEach(s => { if (s.src && !s.listId && s.slot == null && !r.matched.includes(s)){ s.removed = true; r.missing++; } });
   app.batch = {name:data.name || '대상 목록', importedAt:new Date().toISOString()};
   persistNow();
   return r;
 }
 
-/* ---------- 목록 공유: 링크(# 뒤, 서버로 전송되지 않음) 또는 목록 파일 ---------- */
-const LINK_MAX = 6000;
-$('#shareListBtn').addEventListener('click', () => {
-  const rows = app.sites.filter(s => s.src && !s.removed).map(s => s.src);
-  const name = app.batch ? app.batch.name : '대상 목록';
-  const sh = $('#sheet'); sh.innerHTML = '';
-  sh.appendChild(el('h3', 'ptitle', `목록 공유 · ${rows.length}개 시설`));
-  sh.appendChild(el('p', 'sub', '함께 가는 실원에게 보내면 같은 목록이 등록됩니다. 엑셀에서 온 정보만 들어가고 사진·작성 내용은 들어가지 않습니다. 링크의 정보는 주소의 # 뒤에 있어 서버로 전송되지 않습니다.'));
-  const opt = {withTravelers:true, withContact:false};
-  [['withTravelers', '출장자 이름 포함 (빼도 인원 수는 유지)'], ['withContact', '연락처·담당자 포함']].forEach(([k, t]) => {
-    const l = el('label', 'check'); const x = document.createElement('input'); x.type = 'checkbox'; x.checked = opt[k];
-    x.addEventListener('change', () => { opt[k] = x.checked; make(); }); l.append(x, document.createTextNode(' ' + t)); sh.appendChild(l);
-  });
-  const ta = document.createElement('textarea'); ta.readOnly = true; ta.rows = 3; ta.className = 'linkbox'; ta.setAttribute('aria-label', '공유 링크');
-  const info = el('p', 'sub');
-  const r1 = el('div', 'row');
-  // 복사·공유는 터치 직후에 바로 실행되어야 하므로 링크를 미리 만들어 둠
-  const bCopy = btn('btn primary', '링크 복사', async () => {
-    try{ await navigator.clipboard.writeText(link); info.textContent = '복사했습니다. 메신저에 붙여 넣어 보내세요.'; }
-    catch(e){ ta.focus(); ta.select(); info.textContent = '위 링크를 길게 눌러 복사하세요.'; }
-  });
-  const bSend = btn('btn', '링크 보내기', async () => {
-    try{ await navigator.share({title:name, text:name + ' 대상 목록', url:link}); }catch(e){}
-  });
-  bSend.hidden = !navigator.share;
-  r1.append(bCopy, bSend);
-  const bFile = btn('btn', '목록 파일로 저장 (.json)', async () => {
-    const m = /(\d+)\s*년\s*(\d+)\s*차/.exec(name);
-    const fname = `대상목록_${m ? `${m[1]}년${m[2]}차` : (clean(name).replace(/\s+/g, '').slice(0, 20) || '목록')}.json`;
-    const file = new File([JSON.stringify(IMP.packList(name, rows, opt))], fname, {type:'application/json'});
-    try{
-      if (downloads) await downloads.save({filename:fname, data:file}); else plainDownload(file);
-      info.textContent = `저장했습니다: ${fname} → 메일·메신저로 보내면 받는 사람이 「목록 파일 불러오기」로 등록합니다.`;
-    }catch(e){ info.textContent = '저장하지 못했습니다.'; }
-  });
-  const bClose = btn('btn', '닫기', () => dlg.close());
-  sh.append(ta, r1, info, bFile, bClose);
-  let link = '';
-  async function make(){
-    const code = await IMP.encodeShare(IMP.packList(name, rows, opt), JSZip);
-    link = location.href.split('#')[0] + '#list=' + code;
-    const tooLong = link.length > LINK_MAX;
-    ta.value = tooLong ? '' : link; bCopy.disabled = bSend.disabled = tooLong;
-    info.textContent = tooLong ? `목록이 커서 링크가 너무 깁니다(${link.length.toLocaleString()}자). 아래 「목록 파일로 저장」으로 공유하세요.` : `링크 길이 ${link.length.toLocaleString()}자`;
-  }
-  dlg.oncancel = null; dlg.onclose = null;
-  dlg.onclick = ev => { if (ev.target === dlg) dlg.close(); };
-  if (!dlg.open) dlg.showModal();
-  if (window.JSZip) make(); else info.textContent = '도구를 불러오지 못했습니다. 새로고침하세요.';
-});
+/* ---------- 관리 화면 (#admin, 인터넷 PC에서 목록 파일 만들기 — 오프라인 admin.html 과 같은 코드) ---------- */
+const adminMode = location.hash === '#admin';
+function startAdmin(){
+  ['#listView', '#editView', '#bar', '#backBtn', '#resetBtn', '#setBtn'].forEach(k => { $(k).hidden = true; });
+  $('#adminView').hidden = false; $('#hdrSub').textContent = '대상목록 파일 만들기 (관리 화면)';
+  window.SajinAdmin.start({ plainDownload, downloads: () => downloads, crypto: CRYPTO });
+}
 
 load();
 })();

@@ -55,19 +55,16 @@ for (const file of ['sample_list.xlsx', 'sample_list_alias.xlsx']) {
   assert.deepEqual(groups.map(x => x.label), ['11.3 (화)', '11.2 (월)', '11.4 (수)'], '오늘 먼저, 나머지 날짜순');
   assert.deepEqual(groups.map(x => x.sites.length), [3, 2, 2]);
 
-  // 공유 링크: 왕복 복원, 연락처 기본 제외
-  const full = I.packList(r.name, r.rows, { withContact: true });
-  const back = await I.decodeShare(await I.encodeShare(full, JSZip), JSZip);
+  // 예전 목록 파일(.json): 읽기만 지원, 연락처 기본 제외
+  const back = I.unpackList(JSON.parse(JSON.stringify(I.packList(r.name, r.rows, { withContact: true }))));
   assert.equal(back.name, r.name);
-  assert.deepEqual(back.rows, r.rows.map(x => Object.assign({}, x, { travelerCount: 0 })), '공유 링크 왕복');
-  const code = await I.encodeShare(I.packList(r.name, r.rows), JSZip);
-  const noC = await I.decodeShare(code, JSZip);
-  assert.ok(noC.rows.every(x => !x.phone && !x.contact), '연락처 포함 해제 시 연락처 빠짐');
-  assert.ok(!/[?&#+/=]/.test(code), '링크 문자 안전 (base64url)');
-  const noT = await I.decodeShare(await I.encodeShare(I.packList(r.name, r.rows, { withTravelers: false }), JSZip), JSZip);
-  assert.ok(noT.rows.every(x => !x.travelers.length), '출장자 이름 제외');
+  assert.deepEqual(back.rows, r.rows.map(x => Object.assign({}, x, { travelerCount: 0 })), '예전 목록 파일 읽기');
+  assert.ok(I.unpackList(I.packList(r.name, r.rows)).rows.every(x => !x.phone && !x.contact), '연락처 기본 제외');
+  const noT = I.unpackList(I.packList(r.name, r.rows, { withTravelers: false }));
   assert.equal(I.metaFromRow(noT.rows[2], settings).inspectors, '총 3명(국토안전관리원 3명)', '이름을 빼도 인원은 유지');
-  await assert.rejects(I.decodeShare(code.slice(0, 40), JSZip), /잘렸거나/);
+  // 바뀐 시설물 비교
+  const d = I.diffRows(r.rows, r.rows.filter(x => x.no !== 2).map(x => x.no === 1 ? Object.assign({}, x, { location: '바뀐 주소' }) : x).concat([Object.assign({}, r.rows[0], { facility: '새시설' })]));
+  assert.deepEqual(d, { added: ['새시설'], removed: ['다라아파트'], changed: ['가나아파트'] });
 
   // 다시 불러오기: 직접 고친 값 보호, 빠진 시설 표시
   const mk = row => I.applyRow({ id: 'x' + row.no, edited: [], meta: {}, sections: [] }, row, settings);
@@ -84,4 +81,4 @@ await assert.rejects(async () => I.parseWorkbook([{ name: 'x', rows: [['a', 'b']
 // 첫 시트에 머리글이 없으면 다음 시트를 찾음
 const { sheets } = await readXlsx(fx('sample_list.xlsx'), JSZip);
 assert.equal(I.parseWorkbook([{ name: '표지', rows: [['제목']] }, ...sheets]).rows.length, 7, '다음 시트 찾기');
-console.log('대상목록 테스트 통과: 가짜 엑셀 2개, 시설 7건, 공유 링크·다시 불러오기');
+console.log('대상목록 테스트 통과: 가짜 엑셀 2개, 시설 7건, 예전 목록 파일·바뀐 시설물·다시 불러오기');

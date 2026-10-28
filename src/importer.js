@@ -158,7 +158,7 @@
       else { out.push(opt.makeSite(r)); res.added++; }
     });
     sites.forEach(s => { if (s.src && !used.has(s) && opt.sameBatch) { s.removed = true; res.missing++; } });
-    res.sites = out;
+    res.sites = out; res.matched = [...used];
     return res;
   }
   // 날짜별 묶음: 오늘 묶음 먼저, 나머지는 날짜순, 날짜 없는 것은 끝
@@ -170,47 +170,52 @@
   }
   function dayLabel(key) { const p = key ? parseDate(key) : null; return p ? `${p.m}.${p.d} (${p.wd})` : '날짜 없음'; }
 
-  /* ---- 목록 공유(링크·파일): 엑셀에서 온 정보만 담는다 ---- */
+  /* ---- 예전 목록 파일(.json, 평문) 읽기 — 새로 만드는 기능은 없앰(목록은 암호화 파일 .sajin 으로만) ---- */
   const KEYS = ['no', 'facility', 'owner', 'location', 'kind', 'grade', 'completed', 'service', 'safetyGrade', 'year',
     'travelers', 'travelerCount', 'dateKey', 'dateLabel', 'wd', 'ampm', 'buildings', 'phone', 'contact'];
-  function packList(name, rows, opt) {
+  // 연락처·출장자 이름 빼기 (opt.withContact 기본 제외, opt.withTravelers === false 이면 이름 대신 인원만)
+  function stripRows(rows, opt) {
     opt = opt || {};
-    return { v: 1, n: str(name), k: KEYS, r: rows.map(r0 => {
-      const r = Object.assign({}, r0);
+    return rows.map(r0 => {
+      const r = Object.assign({}, r0, { travelers: (r0.travelers || []).slice() });
       if (!opt.withContact) { r.phone = ''; r.contact = ''; }
       if (opt.withTravelers === false) { r.travelerCount = travelerCount(r0); r.travelers = []; }
-      return KEYS.map(k => k === 'travelers' ? (r.travelers || []).join(', ') : (r[k] == null ? '' : r[k]));
-    }) };
+      return r;
+    });
   }
-  function unpackList(o) {
-    if (!o || o.v !== 1 || !Array.isArray(o.k) || !Array.isArray(o.r)) throw new Error('목록 정보 형식이 올바르지 않습니다.');
+  // 밖에서 받은 행(공유 링크·목록 파일·서버 목록)을 정해진 칸·길이로 정리
+  function cleanRows(list) {
     const cut = v => str(v).slice(0, 300);
-    const rows = o.r.slice(0, 500).map((a, i) => {
-      const r = {}; KEYS.forEach(k => { const j = o.k.indexOf(k); r[k] = j >= 0 && Array.isArray(a) ? a[j] : ''; });
-      const out = {}; KEYS.forEach(k => { out[k] = cut(r[k]); });
+    return (Array.isArray(list) ? list : []).slice(0, 500).map((r, i) => {
+      const out = {}; KEYS.forEach(k => { out[k] = k === 'travelers' && Array.isArray(r && r[k]) ? r[k].join(', ') : cut(r && r[k]); });
       out.no = parseInt(out.no, 10) || i + 1;
       out.travelers = splitNames(out.travelers);
       out.travelerCount = parseInt(out.travelerCount, 10) || 0;
       if (out.dateKey && !parseDate(out.dateKey)) out.dateKey = '';
       return out;
     }).filter(r => r.facility);
+  }
+  function packList(name, rows, opt) {
+    return { v: 1, n: str(name), k: KEYS, r: stripRows(rows, opt).map(r =>
+      KEYS.map(k => k === 'travelers' ? r.travelers.join(', ') : (r[k] == null ? '' : r[k]))) };
+  }
+  function unpackList(o) {
+    if (!o || o.v !== 1 || !Array.isArray(o.k) || !Array.isArray(o.r)) throw new Error('목록 정보 형식이 올바르지 않습니다.');
+    const rows = cleanRows(o.r.map(a => { const r = {}; KEYS.forEach(k => { const j = o.k.indexOf(k); r[k] = j >= 0 && Array.isArray(a) ? a[j] : ''; }); return r; }));
     if (!rows.length) throw new Error('목록에 시설물이 없습니다.');
-    return { name: cut(o.n), rows };
+    return { name: str(o.n).slice(0, 300), rows };
   }
-  async function encodeShare(pack, JSZip) {
-    const z = new JSZip(); z.file('l', JSON.stringify(pack));
-    const b = await z.generateAsync({ type: 'base64', compression: 'DEFLATE', compressionOptions: { level: 9 } });
-    return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  async function decodeShare(code, JSZip) {
-    try {
-      const b = String(code).replace(/-/g, '+').replace(/_/g, '/');
-      const z = await JSZip.loadAsync(b + '==='.slice((b.length + 3) % 4), { base64: true });
-      return unpackList(JSON.parse(await z.file('l').async('string')));
-    } catch (e) { throw new Error('공유 링크가 잘렸거나 올바르지 않습니다. 링크 전체를 다시 복사해 주세요.'); }
+  // 이전 목록과 새 목록 비교 (관리 화면·스크립트의 「바뀐 시설물」 표시용): 시설물명+날짜 기준
+  function diffRows(oldRows, newRows) {
+    const key = r => siteKey(r.facility, r.dateKey), om = new Map(oldRows.map(r => [key(r), r])), nm = new Map(newRows.map(r => [key(r), r]));
+    const same = (a, b) => ['owner', 'location', 'kind', 'grade', 'completed', 'service', 'safetyGrade', 'buildings', 'phone', 'contact', 'ampm']
+      .every(k => String(a[k] || '') === String(b[k] || '')) && (a.travelers || []).join() === (b.travelers || []).join();
+    return { added: newRows.filter(r => !om.has(key(r))).map(r => r.facility),
+      removed: oldRows.filter(r => !nm.has(key(r))).map(r => r.facility),
+      changed: newRows.filter(r => om.has(key(r)) && !same(om.get(key(r)), r)).map(r => r.facility) };
   }
 
-  const api = { parseWorkbook, parseDate, metaFromRow, applyRow, mergeSites, groupByDate, dayLabel, inspectorsText, packList, unpackList, encodeShare, decodeShare };
+  const api = { parseWorkbook, parseDate, metaFromRow, applyRow, mergeSites, groupByDate, dayLabel, inspectorsText, stripRows, cleanRows, packList, unpackList, diffRows };
   root.SajinImport = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

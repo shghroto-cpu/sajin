@@ -17,23 +17,26 @@
   <button class="ghost" id="backBtn" type="button" hidden>← 목록</button>
   <div class="grow"><h1>현장 사진대지</h1><p id="hdrSub">대상 목록</p></div>
   <button class="ghost" id="resetBtn" type="button" hidden>보고서 비우기</button>
+  <button class="ghost" id="setBtn" type="button" hidden aria-label="설정">⋯</button>
 </div><div class="stripe"></div></header>
 
 <main class="wrap" id="listView" hidden>
   <section class="block lhead">
     <p class="batch"><b id="batchName">대상 목록</b> <span id="batchCount"></span></p>
-    <div class="row"><button class="btn primary" id="xlsBtn" type="button">엑셀로 대상 목록 불러오기</button></div>
-    <div class="row">
-      <button class="btn" id="shareListBtn" type="button">목록 공유</button>
-      <button class="btn" id="jsonBtn" type="button">목록 파일 불러오기</button>
-    </div>
+    <p class="sync" id="listInfo" hidden></p>
+    <div class="row"><button class="btn primary big" id="qrBtn" type="button">QR 찍기</button><button class="btn primary big" id="listFileBtn" type="button">목록 파일 불러오기</button></div>
+    <p class="sub">팀장 PC 화면·인쇄물의 QR을 찍거나, 기관 메일로 받은 대상목록 파일(.sajin)을 고르세요. 엑셀(.xlsx)도 불러올 수 있습니다(이 휴대폰에서만).</p>
     <div class="row"><button class="btn" id="manualBtn" type="button">직접 입력해서 시작</button></div>
   </section>
+  <div id="remoteBox"></div>
   <p class="msg" id="lmsg" role="status"></p>
   <div id="siteList"></div>
+  <div id="otherTeams"></div>
   <button class="addsec dangertxt" id="clearListBtn" type="button">목록 비우기</button>
-  <p class="sub" style="margin-top:14px">엑셀 목록·사진·입력 내용은 이 휴대폰 브라우저에만 저장되며, 어디에도 업로드되지 않습니다.<br>앱 버전 @@VERSION@@</p>
+  <p class="sub" style="margin-top:14px">대상 목록·사진·입력 내용은 이 휴대폰 브라우저에만 저장되며, 어디에도 업로드되지 않습니다.<br>앱 버전 @@VERSION@@</p>
 </main>
+
+<main class="wrap" id="adminView" hidden></main>
 
 <main class="wrap" id="editView" hidden>
   <details class="block" id="metaBox">
@@ -47,13 +50,12 @@
 
 <div class="bar" id="bar" hidden><div class="inner">
   <div class="count">사진<b id="cnt">0장</b></div>
-  <button class="mail" id="saveBtn" type="button">파일 저장</button>
-  <button class="save" id="mailBtn" type="button">메일로 보내기</button>
-</div><p class="msg" id="msg" role="status"></p></div>
+  <button class="save" id="saveBtn" type="button">파일 저장 (메일 첨부용)</button>
+  <button class="mail" id="mailBtn" type="button">공유</button>
+</div><p class="msg" id="msg" role="status"></p><p class="msg"><button class="linkbtn" id="copyToBtn" type="button" hidden></button></p></div>
 
 <input type="file" id="fileIn" accept="image/*" multiple hidden>
-<input type="file" id="xlsIn" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-<input type="file" id="jsonIn" accept=".json,application/json" hidden>
+<input type="file" id="listIn" hidden>
 
 <dialog id="dlg"><div class="sheet" id="sheet"></div></dialog>
 

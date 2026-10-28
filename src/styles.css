@@ -46,7 +46,7 @@ details[open].block>summary::after{content:"접기"}
 .form{padding:0 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .form .full{grid-column:1/-1}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2);font-weight:500}
-input[type=text],input[type=number],textarea,select{width:100%;border:1px solid var(--line);background:var(--field);border-radius:8px;padding:10px 11px;font-size:16px;color:var(--ink)}
+input[type=text],input[type=number],input[type=password],textarea,select{width:100%;border:1px solid var(--line);background:var(--field);border-radius:8px;padding:10px 11px;font-size:16px;color:var(--ink)}
 textarea{resize:vertical;min-height:84px}
 input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 .check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink)}
@@ -139,6 +139,76 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .modes{border:1px solid var(--line);border-radius:8px;padding:8px 12px 10px;display:flex;flex-direction:column;gap:8px;margin:0}
 .modes legend{font-size:13px;color:var(--ink2);padding:0 4px}
 .linkbox{min-height:0;font-size:13px;word-break:break-all}
+/* 대상목록 파일(.sajin) */
+.sync{margin:0;font-size:13px;color:var(--ink2)}
+.linkbtn{background:none;border:0;padding:2px 4px;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline}
+.keycard{padding:16px;display:flex;flex-direction:column;gap:10px;border:2px solid var(--blue)}
+.keycard>b{font-size:17px}
+.keycard .sub{margin:0}
+.keycard .msg{margin:0}
+.inrow>input{flex:2}
+.inrow>button{flex:1}
+.pick{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.pick input{width:20px;height:20px;margin-top:2px;accent-color:var(--blue);flex:none}
+.pick .sub{display:block;font-size:13px;color:var(--ink2)}
+.tag.team{border-color:var(--blue);color:var(--blue)}
+.others{margin-top:20px}
+.others>summary{cursor:pointer;font-weight:600;color:var(--blue);padding:8px 2px}
+/* 관리 화면 (#admin) */
+.adm{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.adm h2,.adm h3{margin:0}
+.adm h2{font-size:19px}.adm h3{font-size:16px}
+.adm .sub{margin:0}
+.admprev{display:flex;flex-direction:column;gap:8px}
+.guide{border:2px solid var(--vis)}
+.guide .big{font-size:17px;font-weight:600;margin:0}
+.mailbody{font-size:14px;min-height:0}
+.btn.big{padding:15px 12px;font-size:17px}
+.steps{margin:10px 0 0;padding-left:22px;font-size:15px;display:flex;flex-direction:column;gap:4px}
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;font-size:14px}
+#listInfo{display:flex;flex-wrap:wrap;gap:4px 10px}
+.guide ol{margin:6px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+.guide a{color:var(--blue);font-weight:600}
+/* QR (관리 화면 표시·인쇄, 휴대폰 QR 찍기). QR 은 다크 모드에서도 흰 바탕 */
+.qrview{border:2px solid var(--vis)}
+.qrview .big{font-size:17px;font-weight:600;margin:0}
+.qrhead{margin:0;font-weight:600}
+.qrone,.qrgrid{display:flex;flex-wrap:wrap;gap:16px;justify-content:center}
+.qrfig,.pfig{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.qrno{font-weight:700;font-size:18px}
+.qrbox{background:#fff;line-height:0}
+.qrbox svg{display:block}
+.qrone .qrbox svg{height:70vh;width:auto;max-width:100%}
+.qrgrid .qrbox svg{height:44vh;width:auto;max-width:100%}
+.printsheet{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+.ppage{background:#fff;color:#000;padding:12mm;border:1px solid var(--line);display:flex;flex-direction:column;gap:6mm}
+.ppage h2{margin:0;font-size:20px}
+.ppage .pinfo{margin:0;font-weight:600}
+.pgrid{display:grid;grid-template-columns:repeat(2,80mm);gap:8mm;justify-content:center}
+.ppage.one .pgrid{grid-template-columns:120mm}
+.pfig .qrbox svg{width:100%;height:auto}
+.pfig{width:100%}
+.ppage.small{padding:6mm}
+.ppage.small .pgrid{grid-template-columns:repeat(4,40mm);justify-content:start;gap:6mm}
+.ppage.small .pfig .qrbox{width:40mm}
+.ppage.small .qrno{font-size:12px}
+.pguide{margin:0;padding-left:20px;font-size:14px}
+.ppage.small .pguide{padding-left:0;font-size:11px}
+@media print{
+  body.printing *{visibility:hidden}
+  body.printing .printsheet,body.printing .printsheet *{visibility:visible}
+  body.printing .printsheet{position:absolute;left:0;top:0;width:100%;margin:0}
+  body.printing .noprint{display:none!important}
+  body.printing .ppage{border:0;padding:0}
+  @page{size:A4;margin:12mm}
+}
+/* 휴대폰: QR 받는 중 · QR 찍기 */
+.qrprog .chips{display:flex;gap:6px;flex-wrap:wrap}
+.qrprog .chips span{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:14px}
+.qrprog .chips span.got{background:var(--vis);color:var(--vis-ink);border-color:var(--vis);font-weight:700}
+.scan{display:flex;flex-direction:column;gap:10px}
+.scan video{width:100%;max-height:60vh;background:#000;border-radius:8px;object-fit:cover}
+@media (min-width:900px){#adminView{max-width:960px}}
 [hidden]{display:none!important}
 @media (max-width:420px){.form{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
